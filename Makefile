@@ -4,6 +4,9 @@ build:
 	bash platforms/copilot-cli/build.sh
 
 validate:
+	@echo "Checking portable plugin manifest..."
+	@test -f plugins/maister/plugin.json || (echo "FAIL: missing plugins/maister/plugin.json" && exit 1)
+	@test -f plugins/maister-copilot/plugin.json || (echo "FAIL: generated variant missing plugin.json; run make build" && exit 1)
 	@echo "Checking no colons in command names..."
 	@! grep -r '^name:.*:' plugins/maister-copilot/commands/ 2>/dev/null || (echo "FAIL: colons in command names" && exit 1)
 	@echo "Checking no multi-select references..."

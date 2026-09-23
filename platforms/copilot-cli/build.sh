@@ -87,4 +87,10 @@ done
 #     contain it.
 cp "$ROOT/platforms/copilot-cli/README.md" "$OUT/README.md"
 
+# 11. Keep the portable plugin manifest in generated variants. Codex uses the
+#    root plugin.json while Copilot continues to use .claude-plugin/plugin.json.
+test -f "$OUT/plugin.json"
+sedi 's/"name": "maister"/"name": "maister-copilot"/' "$OUT/plugin.json"
+sedi 's/for Claude Code, GitHub Copilot CLI, and Codex/for GitHub Copilot CLI and Codex/' "$OUT/plugin.json"
+
 echo "Built Copilot CLI variant at $OUT"

@@ -1,6 +1,18 @@
 # Maister Plugin
 
-This plugin provides AI-powered Software Development Lifecycle (SDLC) capabilities for Claude Code projects.
+This plugin provides AI-powered Software Development Lifecycle (SDLC) capabilities for Claude Code, GitHub Copilot CLI, and Codex projects.
+
+## Portable plugin surface
+
+`plugin.json` is the platform-neutral manifest. It declares the shared
+`skills/` directory and the optional MCP configuration for hosts that support
+portable plugins, including Codex. The Claude-specific `.claude-plugin/`
+manifest, commands, agents, and hooks remain available for Claude Code; the
+Copilot build emits its adapted command and skill vocabulary from this source.
+
+Codex consumes the shared workflows as skills. It does not use the Claude slash
+command registry, so users invoke the corresponding skills (for example
+`$development` or `$research`) through the host's skill interface.
 
 ## Purpose
 

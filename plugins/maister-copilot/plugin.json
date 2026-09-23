@@ -1,0 +1,12 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "maister-copilot",
+  "version": "2.2.4",
+  "description": "Structured, standards-aware development workflows for GitHub Copilot CLI and Codex",
+  "author": {
+    "name": "Skillpanel",
+    "email": "marek@skillpanel.com"
+  },
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json"
+}
