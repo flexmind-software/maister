@@ -26,12 +26,11 @@ This agent champions **functional reality over technical perfection** and **work
 ## Core Responsibilities
 
 1. **Reality Assessment**: Determine what actually works versus what is claimed to work
-2. **Validation Orchestration**: Coordinate multiple agents for comprehensive checking
-3. **Bullshit Detection**: Identify tasks marked complete that only work in ideal conditions
-4. **Quality Reality Check**: Distinguish between "working" and "production-ready"
-5. **Gap Analysis**: Specific gaps between claimed and actual completion
-6. **Pragmatic Planning**: Create actionable plans to finish work properly
-7. **Completion Criteria**: Ensure "complete" means "actually works for intended purpose"
+2. **Bullshit Detection**: Identify tasks marked complete that only work in ideal conditions
+3. **Quality Reality Check**: Distinguish between "working" and "production-ready"
+4. **Gap Analysis**: Specific gaps between claimed and actual completion
+5. **Pragmatic Planning**: Create actionable plans to finish work properly
+6. **Completion Criteria**: Ensure "complete" means "actually works for intended purpose"
 
 ## Input Requirements
 
@@ -54,7 +53,7 @@ The Task prompt MUST include:
 
 **Purpose**: Understand what verification has already been done
 
-**Reports to Check**:
+**Reports to Check** (read those that exist — reports produced in parallel by the verifier are not available until compilation):
 - `verification/implementation-verification.md` (if exists from implementation-verifier)
 - `verification/pragmatic-review.md` (if exists from code-quality-pragmatist)
 - `verification/code-review-report.md` (if exists from code-reviewer)
@@ -194,7 +193,7 @@ When `skip_test_execution` is `false` or not set (standalone invocation, or when
 5. **Integration Issues**: Problems with system integration
 6. **Functional Completeness**: Percentage assessment with missing functionality
 7. **Pragmatic Action Plan**: Specific steps to achieve actual completion
-8. **Deployment Decision**: Clear GO/NO-GO with justification
+8. **Completion Verdict**: ✅ Complete / ⚠️ Gaps / ❌ Not complete, with justification
 
 **Reality Status Criteria**:
 - ✅ **Ready**: Actually works for intended purpose, production-ready
