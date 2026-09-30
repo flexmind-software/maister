@@ -37,6 +37,9 @@ Each orchestrator reads the framework reference file at initialization (Step 1):
 | `references/orchestrator-creation-checklist.md` | Authoring checklist for creating new orchestrators (not loaded at runtime) |
 | `references/html-report-style.md` | Style guide for HTML companion reports (passed to companion-writing agents) |
 | `assets/dashboard.html` | The frozen operator dashboard, copied into every task dir |
+| `assets/tasks-dashboard.html` | Central cross-task dashboard template, copied to `.maister/tasks/dashboard.html` |
+| `scripts/generate-task-index.mjs` | Scans task state files and writes the central task list projection |
+| `scripts/validate-task-index.mjs` | Validates the central task list projection |
 
 ## Key Principles
 
@@ -70,3 +73,25 @@ This skill does NOT get invoked directly. It exists to:
 3. Enable consistent behavior across all orchestrators
 
 When building new orchestrators, reference these patterns rather than duplicating them.
+
+## Central Task Dashboard
+
+In addition to each task's self-contained dashboard, every orchestrator maintains a
+project-level task index when `orchestrator.options.html_output` is enabled. The
+index is a generated projection, not a second source of truth:
+
+1. Copy `assets/tasks-dashboard.html` to `.maister/tasks/dashboard.html` if it is
+   missing.
+2. Run `node <plugin>/skills/orchestrator-framework/scripts/generate-task-index.mjs
+   <project-root>` after task initialization/resume and after every state/dashboard
+   rewrite trigger.
+3. Validate the result with
+   `node <plugin>/skills/orchestrator-framework/scripts/validate-task-index.mjs
+   <project-root>/.maister/tasks/dashboard-data.js`.
+
+The generator scans `.maister/tasks/<type>/*/orchestrator-state.yml` for all
+framework task types and exposes type, title, short description, status, next
+action, updated timestamp, task dashboard link, and state link. It must not modify
+individual task state files. When `html_output` is false, skip the central
+dashboard, data projection, browser opening, and validation just as for task-level
+dashboards.

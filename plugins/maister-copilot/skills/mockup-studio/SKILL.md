@@ -82,7 +82,7 @@ Read `references/visual-companion.md` for the full protocol. Then:
    `node ${MAISTER_PLUGIN_ROOT}/skills/mockup-studio/server/index.mjs --task-path=${task_path} --output-subdir=${output_subdir} &`
    The plugin root is this plugin's own directory — the one holding `.claude-plugin/plugin.json` — and the variable naming it is set in the session environment. Use it as written rather than substituting a path of your own.
    Wait ~1s, verify `curl -s http://localhost:${port}/status` returns ok (try 3847–3850).
-3. **Open browser** (best-effort, non-blocking): Playwright MCP `browser_navigate` to `http://localhost:${port}` → fallback `open`/`xdg-open` → fallback log the URL.
+3. **Open browser** (best-effort, non-blocking): Playwright MCP `browser_navigate` to `http://localhost:${port}` → fallback `open` / `nohup xdg-open "http://localhost:${port}" >/dev/null 2>&1 </dev/null &` → fallback log the URL. The Linux fallback MUST be detached so a browser process that remains attached cannot block the workflow.
 4. **Generate user-facing wireframes** — one screen per relevant view implied by `context`. Title each screen specifically (e.g. "Add New Allergy Form", not "Dashboard"). Bind to discovered tokens/components/CSS variables by their real names. Add `data-screen="slug"` to clickable elements for click-through navigation, and `annotations` for component-reuse / integration / interaction hints (NOT requirements). Generate USER-FACING UI only — never architecture/data-flow/ER diagrams.
 5. **POST each screen**: `POST http://localhost:${port}/update` with `{type, title, html, css, annotations}`. Each POST auto-saves `<output_subdir>/{slug}.html`.
 

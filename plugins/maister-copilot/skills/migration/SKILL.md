@@ -35,8 +35,10 @@ Full framework rule: `../orchestrator-framework/references/orchestrator-patterns
 3. **Create Task Items**: Use `TaskCreate` for all phases (see Phase Configuration), then set dependencies with `TaskUpdate addBlockedBy`
 4. **Create Task Directory**: `.maister/tasks/migrations/YYYY-MM-DD-task-name/`
 5. **Initialize State**: Create `orchestrator-state.yml` with migration context
-6. **Set up Operator Dashboard** (orchestrator-patterns.md § 8) — first read `.maister/config.yml` and set `orchestrator.options.html_output` (default true if the file/key is absent). **When `html_output` is false, SKIP this entire step** — no `dashboard.html`, no `dashboard-data.js`, no browser auto-open — and proceed. Otherwise: copy `../orchestrator-framework/assets/dashboard.html` to the task root as `dashboard.html`, write the initial `dashboard-data.js` (all phases pending, `task.type: "migration"`), then **auto-open it in the user's browser** (`open` / `xdg-open` / `start` per platform, passing the plain absolute filesystem path — NEVER a hand-built `file://` URL; on failure just print the path — never block). On resume: re-copy `dashboard.html` only if missing; regenerate `dashboard-data.js` from state; then auto-open it in the browser again (same opener as a new task — the OS focuses an already-open tab rather than duplicating).
+6. **Set up Operator Dashboard** (orchestrator-patterns.md § 8) — first read `.maister/config.yml` and set `orchestrator.options.html_output` (default true if the file/key is absent). **When `html_output` is false, SKIP this entire step** — no `dashboard.html`, no `dashboard-data.js`, no browser auto-open — and proceed. Otherwise: copy `../orchestrator-framework/assets/dashboard.html` to the task root as `dashboard.html`, write the initial `dashboard-data.js` (all phases pending, `task.type: "migration"`), then **auto-open it in the user's browser** (`open` / `nohup xdg-open ... >/dev/null 2>&1 </dev/null &` / `start` per platform, passing the plain absolute filesystem path — NEVER a hand-built `file://` URL; on failure just print the path — never block). The Linux opener MUST be detached so it cannot block the workflow. On resume: re-copy `dashboard.html` only if missing; regenerate `dashboard-data.js` from state; then auto-open it in the browser again (same opener as a new task — the OS focuses an already-open tab rather than duplicating).
 7. **Discover project documentation**: Read `.maister/docs/INDEX.md` (if exists), extract ALL file paths from the "Project Documentation" section — includes predefined docs AND any user-added project docs. Store as `project_context.project_doc_paths` in state.
+
+When `html_output` is true, also ensure `.maister/tasks/dashboard.html` exists by copying `../orchestrator-framework/assets/tasks-dashboard.html` when missing, then run the shared task-index generator and validator from `../orchestrator-framework/scripts/` against the project root.
 
 **Output**:
 ```
@@ -54,6 +56,8 @@ Starting Phase 1: Analyze current state...
 ## Operator Visibility (applies to every phase)
 
 > **Config gate**: these rules assume `options.html_output` is true (read from `.maister/config.yml` at init, default true). When **false**: skip the Dashboard-upkeep rule entirely (no dashboard files, no browser open, no rewrites) and the HTML-companions rule (do NOT pass `html_style_guide_path`; subagents write md only). The Artifact Summary Contract (§ 7 TL;DR blocks) and `phase_summaries` in state stay active either way.
+
+After every task-level dashboard rewrite trigger, refresh and validate the project-level task index with the shared generator and validator described in orchestrator-framework § 8.1. Skip this whenever `html_output` is false.
 
 Cross-cutting rules from `orchestrator-patterns.md` (same as the development orchestrator):
 
@@ -307,6 +311,8 @@ ask_user - Display executive summary: total issues found, issues fixed, issues r
 - Troubleshooting common issues
 
 **Before closing the workflow** (whether or not this phase ran — when it is skipped, this step follows the Phase 7 gate): **Reconcile artifacts against disk** — compare every `artifacts[]` entry in state with what actually exists and name every missing path in the summary (`orchestrator-patterns.md` § 10).
+
+Before closing the workflow, execute the shared Change Approval and Commit Stage (§ 11): present the scoped migration diff and proposed Conventional Commit, obtain explicit approval, and record the resulting `commit` block. Do not commit unrelated changes.
 
 → End of workflow
 

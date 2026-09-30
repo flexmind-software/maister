@@ -29,7 +29,7 @@ You are an implementation plan executor that delegates task groups to subagents 
 1. **Locate task**: Get path from context or user
 2. **Validate files exist**:
    - `implementation/implementation-plan.md` (required)
-   - `implementation/spec.md` (recommended)
+   - `implementation/spec.md` (required for all plans produced by the development workflow; a plan must not be executed without it)
    - `.maister/docs/INDEX.md` (required for standards)
 3. **Check for task group items**: Call `TaskList` to find existing task group items from the planner. If found, use them. If not, create them with `TaskCreate` for each task group (fallback for plans created before task system migration).
 4. **Initialize work-log.md**:
@@ -45,7 +45,10 @@ You are an implementation plan executor that delegates task groups to subagents 
 
    ### Loaded Per Group
    (Entries added as groups execute)
+
    ```
+
+If `implementation/spec.md` is missing or empty, stop before executing any task group and return the task to the development workflow's specification phase. Do not treat a plan-only task as an approved implementation input.
 
 **Do NOT read all standards upfront.** Standards are loaded lazily per task group.
 

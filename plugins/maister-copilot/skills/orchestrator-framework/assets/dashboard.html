@@ -7,7 +7,7 @@
 <!--
   Maister operator dashboard — static plugin asset.
   Copied into each task directory at workflow initialization.
-  Reads sibling dashboard-data.js (window.MAISTER_DATA) — no server, works from file://.
+  Reads sibling dashboard-data.js (window.MAISTER_DATA or a legacy Maister data global) — no server, works from file://.
   DO NOT edit per-task; this file is maintained in
   plugins/maister/skills/orchestrator-framework/assets/dashboard.html
 -->
@@ -350,7 +350,7 @@ function render(d) {
     renderHeader(d, done, phases.length, pct) +
     renderHeroes(d, phases) +
     '<div class="cols">' +
-      '<div>' + renderTimeline(phases) + renderDrawer(phases) + '</div>' +
+      '<div>' + renderCommit(d.commit) + renderTimeline(phases) + renderDrawer(phases) + '</div>' +
       '<div>' + renderVerification(d.verification) + renderDecisions(phases) + renderRisks(phases) + renderCharacteristics(d.characteristics) + '</div>' +
     '</div>' +
     '<footer>Maister workflow dashboard · data: <code>dashboard-data.js</code> · auto-refreshes every 5s</footer>';
@@ -410,6 +410,16 @@ function renderHeader(d, done, total, pct) {
     '<div class="progress"><div style="width:' + pct + '%"></div></div>' +
     (stats.length ? '<div class="statline">' + stats.join("") + '</div>' : '') +
   '</header>';
+}
+
+function renderCommit(c) {
+  if (!c) return '';
+  const status = c.status || 'not_recorded';
+  const label = status.replace(/_/g, ' ');
+  const details = [c.sha ? '<code>' + esc(c.sha) + '</code>' : '', c.message ? esc(c.message) : ''].filter(Boolean).join(' · ');
+  return '<div class="card"><h2>Change approval & commit</h2><div class="body"><div class="v-status ' + esc(status) + '">' + esc(label) + '</div>' +
+    (c.approved_by ? '<div>Approved by: ' + esc(c.approved_by) + '</div>' : '') +
+    (details ? '<div class="path" style="margin-top:6px">' + details + '</div>' : '') + '</div></div>';
 }
 
 function findArtifact(phases, suffix) {
@@ -585,7 +595,10 @@ function loadData(initial) {
   const s = document.createElement("script");
   s.src = "dashboard-data.js?t=" + Date.now();
   s.onload = () => {
-    const d = window.MAISTER_DATA;
+    // Accept projections written by current and older Maister orchestrators.
+    // This keeps existing task dashboards usable after the projection key was
+    // renamed and avoids showing the empty state when data is present.
+    const d = window.MAISTER_DATA || window.__MAISTER_DASHBOARD_DATA__ || window.__MAISTER_STATE__ || window.__MAISTER_TASK__;
     if (d) {
       lastPollTs = Date.now();
       const snap = JSON.stringify(d);

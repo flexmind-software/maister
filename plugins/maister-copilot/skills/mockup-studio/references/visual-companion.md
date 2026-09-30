@@ -85,7 +85,7 @@ Example annotations:
 ### Browser Opening
 
 1. **Primary**: Playwright MCP `browser_navigate` (if configured)
-2. **Fallback 1**: `open` command (macOS) / `xdg-open` (Linux)
+2. **Fallback 1**: `open` command (macOS) / `nohup xdg-open "http://localhost:${PORT}" >/dev/null 2>&1 </dev/null &` (Linux). The Linux fallback is detached because some Chromium launchers remain attached until the browser exits.
 3. **Fallback 2**: Log URL for manual opening, continue with terminal-only review
 
 ### Teardown

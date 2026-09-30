@@ -59,7 +59,12 @@ For all analysis, planning, implementation, and verification phases: **ALWAYS DE
 
 `→ Pause` in older prose is a synonym for `→ MANDATORY GATE`.
 
-**`→ MANDATORY GATE` means STOP and USE ask_user.** This is NOT optional. You MUST invoke the `ask_user` tool and WAIT for user response. Proceeding without it is a protocol violation.
+**`→ MANDATORY GATE` means STOP and obtain an explicit user response.** When the
+platform provides `ask_user`, invoke it and wait. When it does not, the
+orchestrator MUST render the completed-phase summary, the exact gate question,
+and the available choices as a normal user-visible message, then end the turn
+so the next user message is the response. It must never silently end after a
+phase summary and it must never invent an approval.
 
 All orchestrators pause at `→ MANDATORY GATE` transitions for user review and prompt for optional phases.
 
@@ -93,6 +98,21 @@ Every phase that follows a `→ MANDATORY GATE` includes an entry check at its T
 
 This catches missed gates: if the previous phase's `→ MANDATORY GATE` was skipped (e.g., the model output a summary and moved on), the entry check forces the gate to fire before the next phase executes. If the gate already fired, continue normally.
 
+### Gate presentation contract
+
+Before every gate, the orchestrator must present enough information for the
+user to decide without reopening the task directory:
+
+1. what the phase produced (artifacts and verification result);
+2. key decisions and unresolved risks, copied from `phase_summaries`;
+3. the concrete question and its available choices; and
+4. what phase will run after each choice.
+
+If the gate has no user decision or review choice, label it as an automatic
+transition and follow the AUTO-CONTINUE rules. A phase must not appear to stop
+with no question. The dashboard projection must be refreshed before a gate so
+the same summary is visible there.
+
 ### AUTO-CONTINUE Rules
 
 When a phase ends with `→ **AUTO-CONTINUE**`:
@@ -101,6 +121,10 @@ When a phase ends with `→ **AUTO-CONTINUE**`:
 - Do NOT use ask_user
 - Do NOT wait for user input
 - After any summary, proceed immediately to the next phase
+
+AUTO-CONTINUE is only valid when the workflow has no unresolved decision,
+approval, failed artifact, or user-requested review at that transition. If any
+of those exists, use the gate presentation contract above instead.
 
 **Common mistake**: Outputting a summary and then stopping/ending the turn. The summary is fine — stopping is not.
 
@@ -262,6 +286,17 @@ task:
   status: pending | in_progress | completed | failed | blocked
   tags: []
   priority: null  # high | medium | low
+
+# Change approval and commit provenance
+commit:
+  status: not_recorded | pending_approval | approved | committed | declined | blocked
+  sha: null
+  message: null
+  approved_by: null
+  approved_at: null
+  committed_at: null
+  changed_files: []
+  note: null
 ```
 
 The three keys above are the only `options` keys every orchestrator shares. `options` is an **open map** nested under `orchestrator:`: per-orchestrator keys are listed in each SKILL.md "Domain Context" section.
@@ -343,7 +378,7 @@ phase_summaries:
 4. **Read project config**: read `.maister/config.yml` if it exists; set `orchestrator.options.html_output` from its `html_output` key (default `true` when the file or key is absent — § 4 "Project Configuration"). This single read seeds the state; all dashboard/companion gates below read `options.html_output` from state.
 5. **Create task directory**: `.maister/tasks/<type>/<YYYY-MM-DD-slug>/` plus the subdirectories this workflow owns — each SKILL.md names its own; there is no structure shared by all five workflows *(skip on resume)*
 6. **Create state file**: `orchestrator-state.yml` *(skip on resume)*
-7. **Set up operator dashboard** (§ 8) — *skip this entire step when `options.html_output` is false*: copy `../assets/dashboard.html` (sibling `assets/` directory of this references/ file) to the task root as `dashboard.html`, write the initial `dashboard-data.js`, then **auto-open it in the user's browser** with the platform opener — `open "[abs-task-path]/dashboard.html"` (macOS), `xdg-open` (Linux), `start ""` (Windows). Pass the **plain absolute filesystem path — NEVER construct a `file://` URL** (hand-built URLs get mangled, e.g. `file///` missing the colon; the opener resolves plain paths itself). If the command fails, just print the path hint — never block initialization. On resume: re-copy `dashboard.html` only if missing; regenerate `dashboard-data.js` from state; then auto-open it in the browser again (same opener as a new task — if the tab is already open the OS focuses it rather than duplicating).
+7. **Set up operator dashboard** (§ 8) — *skip this entire step when `options.html_output` is false*: copy `../assets/dashboard.html` (sibling `assets/` directory of this references/ file) to the task root as `dashboard.html`, write the initial `dashboard-data.js`, then **auto-open it in the user's browser** with the platform opener — `open "[abs-task-path]/dashboard.html"` (macOS), `nohup xdg-open "[abs-task-path]/dashboard.html" >/dev/null 2>&1 </dev/null &` (Linux), `start "" "[abs-task-path]/dashboard.html"` (Windows). The Linux opener MUST be detached because some Chromium launchers remain attached until the browser exits and would otherwise block workflow initialization. Pass the **plain absolute filesystem path — NEVER construct a `file://` URL** (hand-built URLs get mangled, e.g. `file///` missing the colon; the opener resolves plain paths itself). If the command fails, just print the path hint — never block initialization. On resume: re-copy `dashboard.html` only if missing; regenerate `dashboard-data.js` from state; then auto-open it in the browser again (same opener as a new task — if the tab is already open the OS focuses it rather than duplicating).
 8. **Create task items**: `TaskCreate` for all phases, then `TaskUpdate addBlockedBy` for dependencies. On resume, also restore completed phase statuses. When `TaskCreate`/`TaskUpdate` are unavailable in the session, record `task_ids: {}` and treat `orchestrator-state.yml` as the sole phase tracker; every other step is unchanged.
 9. **Output summary**: Show task info, phases, starting message — include the dashboard path hint `Dashboard: open [task-path]/dashboard.html in a browser to monitor progress` *only when `options.html_output` is true*.
 
@@ -367,7 +402,11 @@ Task system IDs are ephemeral to a session. On resume:
 ### Resume Logic
 
 1. **Read state file** — Load `orchestrator-state.yml`
-2. **Validate artifacts** — Check expected files for `completed_phases`. If missing, remove from list.
+2. **Validate artifacts** — Check expected files and phase-summary registrations for every `completed_phases` entry. At minimum:
+   - Phase 5 requires non-empty `implementation/spec.md` plus `phase_summaries.specification.artifacts` containing that path;
+   - Phase 7 requires non-empty `implementation/implementation-plan.md` plus the planner's registered implementation-plan artifact;
+   - Phase 8 requires both Phase 5 and Phase 7 prerequisites.
+   If a required file or registration is missing, remove the phase from `completed_phases`, record the inconsistency, and resume from the earliest missing prerequisite. Never trust a completed-phase flag by itself.
 3. **Find resume point** — First phase not in `completed_phases`
 4. **Check prerequisites** — Verify required artifacts exist
 5. **Restore task items** — Re-create phase tasks and mark completed ones
@@ -463,6 +502,14 @@ Each task directory carries a self-contained HTML dashboard so the operator can 
 6. After verification cycles (issues/fixes update)
 7. At finalization
 
+**Projection validation (mandatory):** after every rewrite, run
+`node ../orchestrator-framework/scripts/validate-dashboard-data.mjs <task-path>/dashboard-data.js`
+from the plugin skills directory. Do not leave a failed projection in place. The
+projection must use the schema below exactly: phase titles are stored as `name`
+(never only `title`), and every artifact is an object with at least `path` (not a
+bare path string). The validator is intentionally mechanical because the static
+viewer cannot display or link shorthand records reliably.
+
 **Schema**:
 
 ```js
@@ -476,6 +523,16 @@ window.MAISTER_DATA = {
     description: "", path: "",
     current_activity: null        // short present-continuous line for the running phase
                                   // (the phase's activeForm) — shown as "Now: ..." in the header
+  },
+  commit: {                         // mirror of the top-level commit block
+    status: "not_recorded",         // pending_approval|approved|committed|declined|blocked
+    sha: null,
+    message: null,
+    approved_by: null,
+    approved_at: null,
+    committed_at: null,
+    changed_files: [],
+    note: null
   },
   characteristics: {},            // task_characteristics / design_characteristics when present
   phases: [{
@@ -509,6 +566,28 @@ window.MAISTER_DATA = {
 **Resolved risks**: when a previously recorded risk gets resolved in a later phase, keep the entry and prefix it with `resolved:` (e.g. `"resolved: transient warning — query lookup chosen"`). The viewer dims and strikes resolved entries, separating live risks from settled ones.
 
 The viewer decides presentation (hero artifacts per workflow type, collapsed drawers, severity colors) — orchestrators only supply data.
+
+### 8.1 Central Task Index
+
+The task dashboard above is per-task. Orchestrators MUST also maintain the
+project-level index described in `orchestrator-framework/SKILL.md` when
+`options.html_output` is true. This index is the operator's cross-task view and
+must contain at least type, name, short description, status, next action, updated
+time, and links to the task dashboard and `orchestrator-state.yml`.
+
+Use the shared scripts rather than embedding a second YAML parser in an
+orchestrator:
+
+```bash
+node <plugin-root>/skills/orchestrator-framework/scripts/generate-task-index.mjs <project-root>
+node <plugin-root>/skills/orchestrator-framework/scripts/validate-task-index.mjs <project-root>/.maister/tasks/dashboard-data.js
+```
+
+Run both commands after initialization/resume, phase starts/completions, gate
+decisions, verification cycles, and finalization. The central asset is copied
+only when missing; never overwrite an operator's task state or individual task
+dashboard data. The generated `dashboard-data.js` is a projection and may be
+regenerated at any time.
 
 ---
 
@@ -565,3 +644,33 @@ the miss named.
 reads as if the artifact existed. The transcription is the orchestrator's summary of a subagent's
 words, not the subagent's own artifact, and nothing else in the run records that the substitution
 took place. This comparison is what makes that visible.
+
+## 11. Change Approval and Commit Stage
+
+Every orchestrator that changes code, configuration, tests, documentation, or
+workflow artifacts MUST finish with a visible change-approval/commit stage. This
+stage is separate from verification and is shown in both the task dashboard and
+the central task index.
+
+Before marking the task fully complete:
+
+1. Read `git status --short`, `git diff --stat`, and `git diff --check`.
+2. Separate files belonging to this task from unrelated user changes. Never
+   stage or commit unrelated worktree changes.
+3. Present the changed-file summary, verification result, proposed Conventional
+   Commit message, and any remaining risks to the user.
+4. Ask for explicit approval to commit. Approval to finish the workflow is not
+   implicit permission to create a commit.
+5. On approval, stage only the scoped files, create the commit, capture the exact
+   SHA and subject with `git rev-parse HEAD` and `git log -1 --format=%s`, then
+   write them to the top-level `commit` block in `orchestrator-state.yml`. The
+   post-commit state update is bookkeeping; do not silently fold unrelated
+   changes into the commit just to make the state file clean.
+6. Without approval, leave the worktree unchanged, set `commit.status` to
+   `declined` or `pending_approval`, and finish with an explicit uncommitted
+   state. If the scope is unsafe or mixed, use `blocked` and explain why.
+
+The commit stage must not fabricate a SHA, claim a commit for a dirty worktree,
+or hide files excluded from the commit. A completed task may therefore
+legitimately have `commit.status: pending_approval` or `declined`; the dashboard
+must make that visible.

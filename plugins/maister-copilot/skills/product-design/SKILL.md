@@ -48,7 +48,9 @@ Full framework rule: `../orchestrator-framework/references/orchestrator-patterns
    - Create `context/` folder with `README.md` instructing users to drop relevant files there (meeting transcripts, existing designs, spreadsheets, docs, PDFs, images)
    - Create `analysis/` and `outputs/` directories
 4. **Initialize State**: Create `orchestrator-state.yml` with design context schema (see Domain Context section)
-5. **Set up Operator Dashboard** (orchestrator-patterns.md § 8) — first read `.maister/config.yml` and set `orchestrator.options.html_output` (default true if the file/key is absent), `orchestrator.options.mockup_format` (default `html`), and derive `orchestrator.options.visual_enabled`: **false** when the `--no-visual` flag was passed OR `mockup_format` is `ascii`; otherwise **true**. (So `mockup_format: ascii` and `--no-visual` are equivalent; the flag is a per-run override.) **When `html_output` is false, SKIP the rest of this step** — no `dashboard.html`, no `dashboard-data.js`, no browser auto-open — and proceed. Otherwise: copy `../orchestrator-framework/assets/dashboard.html` to the task root as `dashboard.html`, write the initial `dashboard-data.js` (all phases pending, `task.type: "product-design"`), then **auto-open it in the user's browser** (`open` / `xdg-open` / `start` per platform, passing the plain absolute filesystem path — NEVER a hand-built `file://` URL; on failure just print the path — never block). On resume: re-copy `dashboard.html` only if missing; regenerate `dashboard-data.js` from state; then auto-open it in the browser again (same opener as a new task — the OS focuses an already-open tab rather than duplicating).
+5. **Set up Operator Dashboard** (orchestrator-patterns.md § 8) — first read `.maister/config.yml` and set `orchestrator.options.html_output` (default true if the file/key is absent), `orchestrator.options.mockup_format` (default `html`), and derive `orchestrator.options.visual_enabled`: **false** when the `--no-visual` flag was passed OR `mockup_format` is `ascii`; otherwise **true**. (So `mockup_format: ascii` and `--no-visual` are equivalent; the flag is a per-run override.) **When `html_output` is false, SKIP the rest of this step** — no `dashboard.html`, no `dashboard-data.js`, no browser auto-open — and proceed. Otherwise: copy `../orchestrator-framework/assets/dashboard.html` to the task root as `dashboard.html`, write the initial `dashboard-data.js` (all phases pending, `task.type: "product-design"`), then **auto-open it in the user's browser** (`open` / `nohup xdg-open ... >/dev/null 2>&1 </dev/null &` / `start` per platform, passing the plain absolute filesystem path — NEVER a hand-built `file://` URL). The Linux opener MUST be detached so it cannot block the workflow; on failure just print the path — never block. On resume: re-copy `dashboard.html` only if missing; regenerate `dashboard-data.js` from state; then auto-open it in the browser again (same opener as a new task — the OS focuses an already-open tab rather than duplicating).
+
+When `html_output` is true, also ensure `.maister/tasks/dashboard.html` exists by copying `../orchestrator-framework/assets/tasks-dashboard.html` when missing, then run the shared task-index generator and validator from `../orchestrator-framework/scripts/` against the project root.
 
 **Output**:
 ```
@@ -66,6 +68,8 @@ Starting Phase 0: Initialize & Gather Context...
 ## Operator Visibility (applies to every phase)
 
 > **Config gate**: these rules assume `options.html_output` is true (read from `.maister/config.yml` at init, default true). When **false**: skip the Dashboard-upkeep rule entirely (no dashboard files, no browser open, no rewrites) and the HTML-companions rule — do NOT invoke `html-companion-writer` at Phases 5/6/8 and do NOT pass `html_style_guide_path` anywhere; markdown artifacts are written as usual. The Artifact Summary Contract (§ 7 TL;DR blocks), `phase_summaries` in state, AND Phase 7 visual mockups (design deliverables, not report companions) all stay active either way.
+
+After every task-level dashboard rewrite trigger, refresh and validate the project-level task index with the shared generator and validator described in orchestrator-framework § 8.1. Skip this whenever `html_output` is false.
 
 Cross-cutting rules from `orchestrator-patterns.md` (same as the development and research orchestrators):
 
@@ -643,6 +647,8 @@ ask_user — with options:
 5b. **HTML companion** *(skip when `options.html_output` is false)* (after final approval, so it reflects the approved brief — do NOT regenerate on each refinement iteration): invoke `maister-html-companion-writer` (Task tool) for `outputs/product-brief.md` (see Operator Visibility § 3). Register the returned `html_path` in `phase_summaries.review_handoff.artifacts` and rewrite `dashboard-data.js` so the Product Brief hero card links the HTML.
 
 6. **Reconcile artifacts against disk** — compare every `artifacts[]` entry in state with what actually exists and name every missing path in the summary (`orchestrator-patterns.md` § 10).
+
+7. Execute the shared Change Approval and Commit Stage (§ 11) for the approved design artifacts: present the scoped diff and proposed Conventional Commit, obtain explicit approval, and record the resulting `commit` block. Do not commit unrelated changes.
 
 7. On approval, update task status and suggest next steps.
 
