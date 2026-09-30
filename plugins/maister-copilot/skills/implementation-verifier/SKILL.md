@@ -10,6 +10,15 @@ You are an implementation verifier that orchestrates comprehensive quality assur
 
 **Read-only verification via delegation**: Delegate all analysis to subagents. Compile results. Never fix, modify, or re-implement.
 
+## Dashboard Upkeep
+
+This skill owns the operator dashboard throughout verification, including re-verification cycles after fixes.
+
+- Read `orchestrator.options.html_output` from `orchestrator-state.yml`; skip dashboard rewrites when false or in standalone mode.
+- Follow `orchestrator-patterns.md` § 8 moment 10 and preserve the dashboard's existing task/commit projection.
+- Rewrite the verification phase projection at entry and after every verification cycle with the current status, issues, fixes, and re-verification count.
+- A failed rewrite is recorded as a visible warning but never blocks the verification verdict.
+
 ## Responsibilities
 
 1. Validate prerequisites exist
@@ -67,6 +76,7 @@ You are an implementation verifier that orchestrates comprehensive quality assur
    - Subject: "Reality assessment", activeForm: "Running reality assessment" — only if reality_check_enabled
    - Subject: "Compile report", activeForm: "Compiling verification report"
 6. **Set dependencies** using `TaskUpdate` with `addBlockedBy`: "Compile report" blocked by ALL verification tasks above
+7. **Rewrite `dashboard-data.js`** (skip when `html_output` is false): mark verification `in_progress` and clear the previous cycle's issue projection before new results land.
 
 If prerequisites missing, report and stop.
 
@@ -207,7 +217,8 @@ Use `TaskUpdate` to set "Compile report" task to `status: "in_progress"`.
    - Same content as the md — restructure and visualize, never add findings
    - Never block on it: if generation fails, keep the md, note the miss, continue
 5. **Verify your own artifacts before closing the phase**: `implementation-verification.md` must exist on disk, and so must its `.html` companion whenever `orchestrator.options.html_output` is true. A missing companion is never silent — record it as an issue with `source: "artifacts"`, `severity: "warning"`, leave `html_path: null`, and name the miss in the Phase 5 summary. It still never blocks the verdict (§ 9 "never block"): the point is that the miss is visible, not that the run stops.
-6. Use `TaskUpdate` to set "Compile report" task to `status: "completed"`
+6. **Rewrite `dashboard-data.js`** (skip when `html_output` is false) with the cycle's final status, issues (retaining original severity and marking fixed issues), fixes, re-verification count, and report artifacts. The canonical report and dashboard must be updated together.
+7. Use `TaskUpdate` to set "Compile report" task to `status: "completed"`
 
 ---
 

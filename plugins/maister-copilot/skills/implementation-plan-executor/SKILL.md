@@ -12,12 +12,21 @@ You are an implementation plan executor that delegates task groups to subagents 
 2. **Lazy standards loading**: Load standards per task group, not all upfront
 3. **Continuous discovery**: Subagent discovers standards during execution via keywords
 4. **Test-driven**: Test step (N.1) before implementation steps (N.2+)
-5. **Immediate progress**: Mark checkboxes right after each step completes
-6. **Main agent owns visibility**: Work-log and checkboxes always updated by main agent
+5. **Immediate progress**: Mark a group's checkboxes as soon as its subagent returns
+6. **Main agent owns visibility**: Work-log, checkboxes, and the operator dashboard are always updated by the main agent
+
+## Dashboard Upkeep
+
+This skill owns the dashboard during the implementation phase, including the long-running interior between orchestrator gates.
+
+- Read `orchestrator.options.html_output` from `orchestrator-state.yml`; skip dashboard work when false or in standalone mode.
+- Follow `orchestrator-patterns.md` § 8 moments 8–9 and its timestamp/schema rules.
+- Keep implementation progress as `{groups_done, groups_total, current_wave, skipped: [], reverted: []}` on the implementation phase.
+- Dashboard failures are visible warnings in `work-log.md` and never block implementation.
 
 ## Execution Model
 
-**Always delegate.** Every task group is executed by the `task-group-implementer` subagent. The main agent NEVER writes implementation code directly.
+Every task group is executed by the `task-group-implementer` subagent, however small. The main agent coordinates and never writes implementation code directly.
 
 **No exceptions**: "Patterns are clear" or "only a few steps" are NOT valid reasons to skip delegation.
 
@@ -32,7 +41,8 @@ You are an implementation plan executor that delegates task groups to subagents 
    - `implementation/spec.md` (required for all plans produced by the development workflow; a plan must not be executed without it)
    - `.maister/docs/INDEX.md` (required for standards)
 3. **Check for task group items**: Call `TaskList` to find existing task group items from the planner. If found, use them. If not, create them with `TaskCreate` for each task group (fallback for plans created before task system migration).
-4. **Initialize work-log.md**:
+4. **Regenerate `dashboard-data.js`** from state and current plan checkbox progress (skip when `html_output` is false). Seed `progress` with completed groups, total groups, and `current_wave: null` so resume never shows stale progress.
+5. **Initialize work-log.md**:
    ```markdown
    # Work Log
 
@@ -121,7 +131,7 @@ For each wave:
    - Mark successful groups in the wave as `completed` normally. Keep failed groups `in_progress` with `metadata: {failed_at, failure_reason, wave: N}` until the ask_user recovery path resolves them.
    - The next wave is NOT computed until every failed group's recovery decision is made.
 
-5. After the wave fully resolves (all members `completed` or recovered), recompute the ready set and proceed to the next wave.
+5. After the wave fully resolves (all members `completed` or recovered), rewrite `dashboard-data.js` once with the wave number, completed group count, and any skipped/reverted groups, then recompute the ready set and proceed to the next wave.
 
    **SELF-CHECK before dispatching the next wave**: for every group marked `completed` this wave, did you run the HTML marker-flip command (step 3)? If unsure, run it now — it is idempotent.
 

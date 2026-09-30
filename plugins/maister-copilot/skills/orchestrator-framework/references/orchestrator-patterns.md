@@ -221,6 +221,7 @@ All orchestrators use `orchestrator-state.yml` at `.maister/tasks/[type]/YYYY-MM
 Every timestamp — `created`, `updated`, `phases[].started/completed`, `generated` in `dashboard-data.js`, dates in work-log entries — MUST be a **full ISO 8601 date AND time in UTC** (`2026-06-11T14:32:07Z`).
 
 - **NEVER write a date-only value** (`2026-06-11`) and **NEVER zero-fill the time** (`T00:00:00Z`) — you do not know the clock time from context, so GET it from the system: `date -u +"%Y-%m-%dT%H:%M:%SZ"` (one Bash call can serve every timestamp written in the same turn).
+- **NEVER write a timestamp that was not read from `date` in the same turn.** When back-filling a phase whose real start or end time was not captured, write `null` — never a plausible guess.
 - Why it matters: phase durations, "elapsed" displays, and freshness indicators on the operator dashboard are computed from these values — a midnight placeholder renders as nonsense durations.
 - Task *directory names* keep their date-only `YYYY-MM-DD-` prefix — that is a name, not a timestamp.
 
@@ -228,10 +229,10 @@ Every timestamp — `created`, `updated`, `phases[].started/completed`, `generat
 
 `orchestrator-state.yml` must stay valid YAML: operator tooling reads it with a strict parser and drops a run whose state file does not parse. Lenient loaders accept the common corruptions, so a broken file can go unnoticed for a whole workflow.
 
-- **Update a key where it already is** — never append a second copy of an existing key further down (`decisions_made:` as a block, then `decisions_made: []` later). A later duplicate silently replaces the earlier value, or makes the file unparseable.
-- **New keys go inside their parent block, at the column of their siblings** — never under a scalar, never at a guessed indentation.
+- **Update key by key, in place** — each value that changes replaces its existing key's line or block where it already is. Never append a second copy of an existing key (`decisions_made:` as a block, then `decisions_made: []` later). A later duplicate silently replaces the earlier value, or makes the file unparseable. A key that does not exist yet goes inside its parent block, at the column of its siblings — never under a scalar, never at a guessed indentation.
 - **Prefer rewriting the whole file** (Read it, change the values, Write it back) over appending fragments with Edit. When an edit is the smaller change, replace the existing key's line or block in place.
-- **Re-read after every write** and check that no key repeats at the same level and that every block's children share one column. If the file is broken, repair it before doing anything else; never continue a phase on a state file you know is malformed.
+- **Validate with a re-read after every write** — confirm that every key appears once at its level, every block's children share one column, nothing is nested under a scalar, and the intended values are present. A successful parse alone proves little: lenient parsers accept duplicate keys.
+- **A malformed state file stops the workflow** — report the key, line, and shape that are wrong and use `ask_user`: “Repair the state file” or “Let me investigate” (pause the workflow). Never continue on a state file the operator tooling cannot read.
 
 ### Project Configuration (`.maister/config.yml`)
 
@@ -401,7 +402,7 @@ Task system IDs are ephemeral to a session. On resume:
 
 ### Resume Logic
 
-1. **Read state file** — Load `orchestrator-state.yml`
+1. **Read and validate state file** — Load `orchestrator-state.yml` and apply the § 4 Write Rule's re-read checks. A malformed file stops resume and requires user direction before any phase work.
 2. **Validate artifacts** — Check expected files and phase-summary registrations for every `completed_phases` entry. At minimum:
    - Phase 5 requires non-empty `implementation/spec.md` plus `phase_summaries.specification.artifacts` containing that path;
    - Phase 7 requires non-empty `implementation/implementation-plan.md` plus the planner's registered implementation-plan artifact;
@@ -410,6 +411,7 @@ Task system IDs are ephemeral to a session. On resume:
 3. **Find resume point** — First phase not in `completed_phases`
 4. **Check prerequisites** — Verify required artifacts exist
 5. **Restore task items** — Re-create phase tasks and mark completed ones
+6. **Announce the resume point** — before doing phase work, state the current phase and next gate from state and the workflow phase table. Never infer workflow position from work-log task groups.
 
 | Starting From | Required Prerequisites |
 |---------------|----------------------|
@@ -493,7 +495,7 @@ Each task directory carries a self-contained HTML dashboard so the operator can 
 
 **Every rewrite starts with the clock**: run `date -u +"%Y-%m-%dT%H:%M:%SZ"` via Bash before writing (one call covers all timestamps in the same turn) — `generated`, `started`, `completed`, and state `updated` all take that value. Never guess the time, never reuse a value from an earlier turn (§ 4 Timestamp Rule).
 
-**When to rewrite `dashboard-data.js`** (full rewrite each time — it is a projection of `orchestrator-state.yml` plus `phase_summaries`, never an incremental patch):
+**When to rewrite `dashboard-data.js`** (full rewrite each time — it is a projection of `orchestrator-state.yml` plus `phase_summaries`, never an incremental patch). Interior progress is owned by the skill that owns the long-running phase:
 1. At initialization (all phases pending)
 2. **When a phase starts** (set its status to `in_progress` — BEFORE delegating to the skill/subagent, so the operator sees the running phase, not just the last completed one)
 3. **BEFORE firing every phase exit gate** — the phase's work is finished while the workflow waits (possibly long) for the user's answer. Register the phase's artifacts, summary, decisions, and risks NOW; the status stays `in_progress` until the gate passes (per § 2 state ordering). The operator reviews the finished work on the dashboard while deciding at the gate — a gate fired against a stale dashboard defeats its purpose.
@@ -501,6 +503,11 @@ Each task directory carries a self-contained HTML dashboard so the operator can 
 5. After every gate decision (record the user's choice)
 6. After verification cycles (issues/fixes update)
 7. At finalization
+8. On entry to the implementation phase — regenerate from state and plan checkbox progress
+9. After every implementation wave and at implementation finalization — preserve group progress, skipped groups, and reverted groups
+10. After every verification cycle, including re-verification after fixes
+
+When `html_output` is false, all dashboard rewrites are skipped. A failed interior rewrite must be recorded in the relevant work-log or phase summary but must not block the workflow.
 
 **Projection validation (mandatory):** after every rewrite, run
 `node ../orchestrator-framework/scripts/validate-dashboard-data.mjs <task-path>/dashboard-data.js`
@@ -546,7 +553,8 @@ window.MAISTER_DATA = {
     decisions: [],                // [{decision, rationale}]
     risks: [],                    // [string]
     artifacts: [],                // [{path, label, html}] — paths relative to task root
-    gate: null                    // {question, answer} after the exit gate fires
+    gate: null,                   // {question, answer} after the exit gate fires
+    progress: null                // optional {groups_done, groups_total, current_wave, skipped: [], reverted: []}
   }],
   verification: {                 // mirror of verification_context, when it exists
     status: null,

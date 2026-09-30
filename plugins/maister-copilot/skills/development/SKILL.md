@@ -86,7 +86,7 @@ Starting Phase 1: Codebase Analysis...
 
 ## Operator Visibility (applies to every phase)
 
-> **Config gate**: these rules assume `options.html_output` is true (read from `.maister/config.yml` at init, default true). When **false**: skip rule 2 entirely (no dashboard — no `dashboard.html`/`dashboard-data.js`, no browser open, no rewrites) and rule 3's companions (do NOT pass `html_style_guide_path`; subagents write md only). Rule 1 (§ 7 TL;DR blocks) and `phase_summaries` in state stay active either way.
+> **Config gate**: these rules assume `options.html_output` is true (read from `.maister/config.yml` at init, default true). When **false**: skip rule 2 entirely (no dashboard — no `dashboard.html`/`dashboard-data.js`, no browser open, no rewrites) and rule 3's companions (do NOT pass `html_style_guide_path`; subagents write md only). Rule 1 (§ 7 TL;DR blocks), state-write validation, and `phase_summaries` in state stay active either way.
 
 After every task-level dashboard rewrite trigger, refresh and validate the project-level task index with the shared generator and validator described in orchestrator-framework § 8.1. Skip this whenever `html_output` is false.
 
@@ -95,7 +95,8 @@ Cross-cutting rules from `orchestrator-patterns.md` apply throughout this workfl
 1. **Artifact Summary Contract (§ 7)**: every artifact-writing subagent prompt MUST include the contract instruction (artifacts open with TL;DR / Key Decisions / Open Questions / Risks (the writer heading is `## Open Questions / Risks`)). At context extraction, lift `decisions`, `risks`, and `artifacts` into `phase_summaries.[phase]` (shared entry shape, § 4).
 2. **Dashboard upkeep (§ 8)**: rewrite `dashboard-data.js` at every phase START (mark it `in_progress` before delegating), **BEFORE firing every exit gate** (register the finished phase's artifacts/summary/decisions/risks so the operator reviews them on the dashboard while answering — status stays `in_progress` until the gate passes), after every phase completion (including skips, with reason), every gate decision, every verification cycle, and at finalization. It is a terse projection of state — never duplicate artifact content into it.
 3. **HTML companions (§ 9)**: pass `html_style_guide_path` (absolute path to `../orchestrator-framework/references/html-report-style.md`) to specification-creator, implementation-planner, and e2e-test-verifier. Register returned `html_path` values in `phase_summaries.[phase].artifacts[].html`.
-4. **Gate presentation:** before every exit gate, show the completed-phase summary, artifacts, decisions, risks, exact question, and next phase. If `ask_user` is unavailable, ask the same question in the normal user-visible response and stop there; never stop without a question. Use `AUTO-CONTINUE` when no unresolved decision, approval, failed artifact, or requested review exists.
+4. **State writes (§ 4):** update `orchestrator-state.yml` key by key in place, validate it with a re-read after every write, and stop with `ask_user` on a malformed file — never continue on a state file the operator tooling cannot read.
+5. **Gate presentation:** before every exit gate, show the completed-phase summary, artifacts, decisions, risks, exact question, and next phase. If `ask_user` is unavailable, ask the same question in the normal user-visible response and stop there; never stop without a question. Use `AUTO-CONTINUE` when no unresolved decision, approval, failed artifact, or requested review exists.
 
 ---
 
@@ -167,8 +168,9 @@ Use for **all development tasks**: bug fixes, enhancements, new features, and an
 
 3. Save scope clarifications to `analysis/scope-clarifications.md`
 4. **Set optional phase defaults** based on detected characteristics:
-   - If `task_characteristics.ui_heavy: true` → set `options.e2e_enabled: true`, `options.user_docs_enabled: true`
-   - If `task_characteristics.creates_new_entities: true` → set `options.user_docs_enabled: true`
+   - `options.e2e_enabled` = `ui_heavy`
+   - `options.user_docs_enabled` = `ui_heavy OR creates_new_entities`
+   - Write both values explicitly (`true` or `false`, never leave them `null`) and re-read state to verify the derivation.
    - Command flags (`--e2e`, `--no-e2e`, `--user-docs`, `--no-user-docs`) override these defaults
 
 **Output**: `analysis/gap-analysis.md`, `analysis/scope-clarifications.md` (conditional)
@@ -414,8 +416,8 @@ ask_user - "TDD gate passed. Continue to Phase 10?"
 **Purpose**: Determine which verification checks to run using tiered decision matrix
 **Execute**: Direct - display plan, confirm/adjust via ask_user
 **Output**: Updated state with all verification options
-**State**: Set `options.code_review_enabled`, `options.pragmatic_review_enabled`, `options.reality_check_enabled`, `options.production_check_enabled`, `options.e2e_enabled`, `options.user_docs_enabled`
-**Auto-set**: `skip_test_suite: true` (full test suite already passed during implementation phase; cleared before re-verification if fixes are applied)
+**State**: Set `options.code_review_enabled`, `options.pragmatic_review_enabled`, `options.reality_check_enabled`, `options.production_check_enabled`, `options.e2e_enabled`, `options.user_docs_enabled`, `options.skip_test_suite`
+**Auto-set**: `skip_test_suite: true` only when the implementation work-log records the full test suite as passed; otherwise set it to `false`. Clear it before any re-verification after fixes.
 
 **Step 1**: Display the verification plan:
 ```
@@ -440,9 +442,11 @@ Verification Plan:
 **Q1** (always): ask_user (sequential single-select) — "Which standard verifications to run?"
 Options: "Code review (Recommended)", "Pragmatic review (Recommended)", "Reality check (Recommended)", "Production readiness (Recommended)". All pre-selected.
 
-**Q2** (SKIP if `options.e2e_enabled: false` and no `--e2e` flag): ask_user — "Enable E2E browser verification?" Options: "Yes (Recommended)", "No, skip".
+**Q2** (ASK when `options.e2e_enabled` or `task_characteristics.ui_heavy` is true, or `--e2e` was given; skip only otherwise or with `--no-e2e`): ask_user — "Enable E2E browser verification?" Options: "Yes (Recommended)", "No, skip".
 
-**Q3** (SKIP if `options.user_docs_enabled: false` and no `--user-docs` flag): ask_user — "Generate user documentation?" Options: "Yes (Recommended)", "No, skip".
+**Q3** (ASK when `options.user_docs_enabled`, `ui_heavy`, or `creates_new_entities` is true, or `--user-docs` was given; skip only otherwise or with `--no-user-docs`): ask_user — "Generate user documentation?" Options: "Yes (Recommended)", "No, skip".
+
+Write every answer as explicit `true`/`false`; finalization uses these values to determine whether optional phases were resolved.
 
 → **MANDATORY GATE** — fires regardless of permission mode, session-reminders, or prior approval patterns. Invoke `ask_user` now. Proceeding without a user response is a protocol violation (orchestrator-patterns.md § 2 / § 2.1).
 
@@ -561,10 +565,11 @@ ask_user - "Documentation complete. Continue to Phase 14?"
 
 **Process**:
 1. **Reconcile artifacts against disk** — compare every `artifacts[]` entry in state with what actually exists and name every missing path in the summary (`orchestrator-patterns.md` § 10)
-2. Create workflow summary
-3. Execute the shared Change Approval and Commit Stage (§ 11): inspect the scoped diff, present the proposed Conventional Commit, ask for explicit approval, and record the resulting `commit` block. Do not commit unrelated worktree changes.
-4. Update task status to "completed" after the commit decision is recorded.
-5. Guide next steps (code review, PR, deployment)
+2. **Resolve phase preconditions** — every phase in the phase table must be completed or explicitly skipped by its activation condition. Phase 11 is never optional. If a phase is unresolved, ask whether to run it or finalize with the user's reason recorded in the summary and dashboard.
+3. Create workflow summary
+4. Execute the shared Change Approval and Commit Stage (§ 11): inspect the scoped diff, present the proposed Conventional Commit, ask for explicit approval, and record the resulting `commit` block. Do not commit unrelated worktree changes.
+5. Update task status to "completed" after the commit decision is recorded.
+6. Guide next steps (code review, PR, deployment)
 
 → End of workflow
 
