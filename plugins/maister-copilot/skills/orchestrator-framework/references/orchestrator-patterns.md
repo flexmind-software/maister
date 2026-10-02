@@ -523,6 +523,13 @@ both HTML files with the plugin assets and repairs stale copies, not only missin
 files. The orchestrator must run it at initialization and on every resume before
 rewriting dashboard data. It never overwrites `dashboard-data.js`.
 
+After every dashboard-data rewrite, the orchestrator MUST verify that
+`<task-directory>/dashboard-data.js` exists and run
+`validate-dashboard-data.mjs` against it. When `html_output` is true, a missing
+or invalid data file is a workflow error: repair it and re-validate before
+continuing. The dashboard must never be left pointing at a non-existent sibling
+script.
+
 **Files** (both at task root):
 - `dashboard.html` — static viewer, copied verbatim from `[plugin]/skills/orchestrator-framework/assets/dashboard.html` at initialization (§ 5). NEVER generated or modified by the model — it is a maintained plugin asset.
 - `dashboard-data.js` — data projection written by the orchestrator. The viewer reads it via `<script>` (`window.MAISTER_DATA = {...}`), so it works from `file://` with no server.
@@ -660,7 +667,10 @@ Selected high-value artifacts get a rich HTML companion written by the **same su
 - Companions follow the shared style guide: `html-report-style.md`, the file beside this one. Self-contained single file, no external resources, relative links/images only.
 - When `options.html_output` is true, orchestrators MUST pass the absolute path of that style guide to every companion-writing **agent** as `html_style_guide_path` (you know it — it sits next to the patterns file you read at initialization). When false, omit it (the config gate above). **Skills** that write companions (`implementation-verifier`) receive no such parameter: they resolve the guide themselves and gate on `orchestrator.options.html_output` in state.
 - Register companions in `phase_summaries.[phase].artifacts[].html` so the dashboard (§ 8) links HTML first with md fallback (`html: null` when companions are disabled).
-- Companion generation must never block the workflow: if it fails, keep the md, log the miss, continue.
+- Companion generation itself must not prevent the markdown artifact from being
+  preserved. However, when a companion is required by the artifact table and
+  `html_output` is true, its absence is a verification/finalization failure;
+  it must not be downgraded to an informational warning.
 
 ---
 
@@ -679,8 +689,8 @@ missing, omit the block — silence here means the declaration held.
 
 **What not to do**: reconciliation reports, it never repairs. Do not re-run a phase, regenerate a
 companion or delete the stale entry from state; the entry is the evidence that the artifact was
-promised. Nor does it block completion — a workflow with a missing artifact still finishes, with
-the miss named.
+promised. Missing required artifacts block completion. Missing optional artifacts may be reported
+as warnings only when the workflow specification explicitly marks them optional.
 
 **Why it exists**: an orchestrator can transcribe what a subagent returned, and the verdict then
 reads as if the artifact existed. The transcription is the orchestrator's summary of a subagent's

@@ -15,12 +15,33 @@ You are an implementation plan executor that delegates task groups to subagents 
 5. **Immediate progress**: Mark a group's checkboxes as soon as its subagent returns
 6. **Main agent owns visibility**: Work-log, checkboxes, and the operator dashboard are always updated by the main agent
 
+## Completion Invariant — No Plan Step May Disappear
+
+The implementation plan is the source of truth. Before dispatching a group, create
+an inventory of every numbered step in that group (`N.1`, `N.2`, ...). Preserve
+that inventory in the execution context and reconcile it with the subagent report.
+A group is complete only when every planned step has exactly one explicit result:
+
+- `completed` — with a concrete evidence reference (changed file, test command,
+  generated artifact, or review finding);
+- `skipped` — with a reason and an explicit user-approved decision; or
+- `blocked` — with the group left incomplete and sent through the recovery path.
+
+Missing, duplicated, unknown, or merely implied step IDs are failures. Do not
+infer that a step was completed from a later step, a changed file, or a successful
+group summary. Do not mark a checkbox, Task item, or group as completed while any
+step is missing evidence or has status `blocked`.
+
 ## Dashboard Upkeep
 
 This skill owns the dashboard during the implementation phase, including the long-running interior between orchestrator gates.
 
 - Read `orchestrator.options.html_output` from `orchestrator-state.yml`; skip dashboard work when false or in standalone mode.
 - Follow `orchestrator-patterns.md` § 8 moments 8–9 and its timestamp/schema rules.
+- Before dispatching any implementation group, verify that `dashboard-data.js`
+  exists when `html_output` is true and validate it with
+  `validate-dashboard-data.mjs`. If it is missing or invalid, regenerate it from
+  the current state and stop implementation until validation passes.
 - Keep implementation progress as `{groups_done, groups_total, current_wave, skipped: [], reverted: []}` on the implementation phase.
 - Dashboard failures are visible warnings in `work-log.md` and never block implementation.
 
@@ -112,16 +133,22 @@ For each wave:
    **SELF-CHECK before sending the message**: Are you about to emit a message with one `Task` call when the current wave has more than one group? If yes, STOP. Compose every wave member's prompt first, then emit them all in the same message. Awaiting one before composing the next violates this skill's contract. If the wave has exactly one group, a single `Task` call is correct.
 
 3. **Wait for all wave members to return**, then for each result:
-   - Parse completed steps, standards applied, test results.
-   - Mark all group checkboxes in `implementation-plan.md`.
+   - Parse the complete step mapping and compare it with the pre-dispatch step inventory.
+   - Reject the result as `PARTIAL` when any planned step is missing, duplicated,
+     unknown, or lacks evidence. Do not silently treat an incomplete report as
+     successful.
+   - Mark each checkbox individually only for steps with `completed` status and
+     evidence, or `skipped` status with recorded user approval. Keep all other
+     checkboxes unchecked and route the group through failure/recovery handling.
    - **Sync the HTML companion** (`implementation/implementation-plan.html`, if it exists): run ONE Bash command per completed group, substituting its number for `N` (idempotent — safe to re-run):
      ```bash
-     sed -i '' -e 's/\(data-step="N\.[0-9][0-9]*" class="step \)todo/\1done/g' \
+     sed -i -e 's/\(data-step="N\.[0-9][0-9]*" class="step \)todo/\1done/g' \
                -e 's/\(data-group="N" class="group \)todo/\1done/g' \
                implementation/implementation-plan.html
      ```
      (Linux: `sed -i` without `''`. The leading quote in `data-step="N\.` anchors the exact group — group 1 cannot match 11.) Then VERIFY: `grep -c 'data-group="N" class="group done"'` must return 1; if 0, append a warning to `work-log.md` (`HTML plan sync missed markers for Group N`) — a visible miss, never a silent one. File absent → skip silently; sync never blocks the wave.
-   - Add a group entry to `work-log.md` with standards trail.
+   - Add a group entry to `work-log.md` with the full step mapping, evidence,
+     standards trail, and any skipped/blocked steps.
    - Verify test results are acceptable.
    - `TaskUpdate` to `status: "completed"` with `metadata: {completed_at, tests_passed, files_modified, standards_applied, wave: N}`.
 
@@ -270,6 +297,11 @@ The task-group-implementer returns structured output:
 - [x] N.2 - [description]
 - [ ] N.3 - [description] (if incomplete)
 
+### Plan Step Mapping
+| Step ID | Planned action | Status | Evidence |
+|---|---|---|---|
+| N.1 | [exact plan step] | completed / skipped / blocked | [file, test, artifact, or approved reason] |
+
 ### Standards Applied
 **From Implementation Plan**:
 - .maister/docs/standards/backend/api.md
@@ -357,7 +389,10 @@ After each task group:
 ## Phase 3: Finalize
 
 1. **Validate completion**:
-   - No `- [ ]` checkboxes remain
+   - No `- [ ]` checkboxes remain for a claimed completed implementation
+   - Every numbered plan step appears exactly once in the execution log and has
+     an accepted status plus evidence or an approved skip reason
+   - No step is present in a report without a matching step in the plan
    - All groups have work-log entries
    - Standards Reading Log is complete
    - All group tasks are `completed` via `TaskList` (cross-validate against markdown checkboxes)
@@ -411,6 +446,8 @@ Before returning success:
 
 ### Completion
 - [ ] All steps marked `[x]` or `[~]` (skipped with reason)
+- [ ] Every planned step has exactly one status and concrete evidence
+- [ ] No group is marked completed while a step is missing, blocked, duplicated, or unverified
 - [ ] All task groups have work-log entries
 - [ ] Full test suite passes
 

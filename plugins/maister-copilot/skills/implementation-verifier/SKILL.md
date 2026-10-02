@@ -27,6 +27,20 @@ This skill owns the operator dashboard throughout verification, including re-ver
 4. Update roadmap if exists (optional)
 5. Output summary with overall verdict
 
+## Mandatory Plan Completeness Gate
+
+The implementation plan is an explicit contract, not a checklist suggestion.
+The completeness verification MUST build a row for every numbered plan step and
+compare it with the implementation log, changed files, tests, and subagent
+reports. Each row must contain:
+
+`step_id | planned action | status | evidence | finding`
+
+An implementation is not complete when a step is absent, duplicated, only
+implicitly covered, marked complete without evidence, or marked skipped without
+an explicit user-approved reason. Any such row makes the implementation
+incomplete, regardless of the percentage of other steps completed.
+
 ## Output Artifacts
 
 | Artifact | Condition |
@@ -130,7 +144,7 @@ Task tool call (if NOT skip_test_suite):
 Task tool call (always):
 - subagent_type: `maister-implementation-completeness-checker`
 - description: `Check implementation completeness`
-- prompt: Include task_path, report_path (`[task_path]/verification/completeness-report.md`). The subagent checks plan completion, standards compliance, and documentation completeness.
+- prompt: Include task_path, report_path (`[task_path]/verification/completeness-report.md`). The subagent checks plan completion, standards compliance, and documentation completeness. It MUST include the complete `step_id | planned action | status | evidence | finding` matrix and flag any missing, duplicated, unverified, blocked, or unauthorized skipped step.
 
 Task tool call (if code_review_enabled):
 - subagent_type: `maister-code-reviewer`
@@ -171,6 +185,7 @@ After ALL subagents return:
 - Pragmatic review critical over-engineering → overall status Failed
 - Production readiness deployment blockers → overall status Failed
 - Reality assessment critical gaps → overall status Failed
+- Any missing, duplicated, unverified, blocked, or unauthorized skipped plan step → overall status Failed
 
 ---
 
@@ -184,8 +199,8 @@ Use `TaskUpdate` to set "Compile report" task to `status: "in_progress"`.
    | Status | Criteria |
    |--------|----------|
    | ✅ Passed | 100% implementation, 95%+ tests passing (or skipped — verified in implementation), standards compliant, docs complete, no critical issues from optional reviews |
-   | ⚠️ Passed with Issues | 90-99% implementation OR 90-94% tests OR standards gaps OR optional review warnings |
-   | ❌ Failed | <90% implementation OR <90% tests OR critical failures OR deployment blockers |
+   | ⚠️ Passed with Issues | 100% plan-step coverage, but warnings remain in tests, standards, or optional reviews |
+   | ❌ Failed | Any missing, duplicated, unverified, blocked, or unauthorized skipped plan step; <90% tests; critical failures; or deployment blockers |
 
    **When tests skipped** (`skip_test_suite: true`): Test pass rate is inherited from implementation phase (assumed passing since implementation completed successfully). Note this in the report.
 
@@ -215,8 +230,9 @@ Use `TaskUpdate` to set "Compile report" task to `status: "in_progress"`.
    - Follow the shared style guide at `../orchestrator-framework/references/html-report-style.md` (relative to this SKILL.md): self-contained single file, standard CSS block, no external resources
    - Lead with the verdict banner (✅ Passed / ⚠️ Passed with Issues / ❌ Failed) and issue counts; then findings table sorted critical→info with severity badges, per-check section status, fixes-applied list. Link to the md twin in the header
    - Same content as the md — restructure and visualize, never add findings
-   - Never block on it: if generation fails, keep the md, note the miss, continue
-5. **Verify your own artifacts before closing the phase**: `implementation-verification.md` must exist on disk, and so must its `.html` companion whenever `orchestrator.options.html_output` is true. A missing companion is never silent — record it as an issue with `source: "artifacts"`, `severity: "warning"`, leave `html_path: null`, and name the miss in the Phase 5 summary. It still never blocks the verdict (§ 9 "never block"): the point is that the miss is visible, not that the run stops.
+   - If generation fails, keep the md and note the miss; the required companion
+     remains a verification failure and cannot produce a passing verdict
+5. **Verify your own artifacts before closing the phase**: `implementation-verification.md` must exist on disk, and so must its `.html` companion whenever `orchestrator.options.html_output` is true. A missing required companion is never silent — record it as an issue with `source: "artifacts"`, `severity: "critical"`, leave `html_path: null`, and set the overall verdict to `Failed`. The markdown report may still be preserved for diagnosis.
 6. **Rewrite `dashboard-data.js`** (skip when `html_output` is false) with the cycle's final status, issues (retaining original severity and marking fixed issues), fixes, re-verification count, and report artifacts. The canonical report and dashboard must be updated together.
 7. Use `TaskUpdate` to set "Compile report" task to `status: "completed"`
 
