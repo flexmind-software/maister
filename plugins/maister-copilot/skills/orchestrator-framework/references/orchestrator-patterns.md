@@ -2,6 +2,34 @@
 
 Shared execution rules, schemas, and patterns for all workflow orchestrators.
 
+## 0. Capability Discovery and Host Portability
+
+Every orchestrator MUST inspect the tools exposed by the current host before
+initialization. Tool names in an orchestrator instruction are requirements for
+capabilities, not proof that those tools exist. Detect the host's task,
+interactive-question, delegation, file, shell, and browser capabilities from
+the available tool catalog or discovery mechanism and persist the result at
+`orchestrator.capabilities` in the state file.
+
+Use native tools when present. When a named tool is absent, use the equivalent
+capability if one exists; otherwise use the following portable fallbacks:
+
+- `TaskCreate`/`TaskUpdate`: represent task items and dependencies in
+  `orchestrator-state.yml` and update that file in place with validation.
+- `ask_user`: use the host's equivalent interactive question tool. If none is
+  available, present the exact gate question in a normal user-visible message
+  and stop; never continue past a mandatory gate without a response.
+- `Skill`/`tool_search`: read the referenced `SKILL.md` and execute it with the
+  available tools, while explicitly recording that native delegation was not
+  available.
+- Browser opening: generate and validate dashboard artifacts, report the
+  absolute path, and continue only when opening the browser is optional.
+
+Fallbacks must preserve all state, dependency, artifact, gate, and verification
+invariants. An orchestrator MUST NOT claim that a native tool call occurred
+when it did not. If no safe equivalent exists for a mandatory operation, stop
+and ask the user for direction.
+
 ---
 
 ## 1. Delegation Rules
@@ -379,7 +407,7 @@ phase_summaries:
 4. **Read project config**: read `.maister/config.yml` if it exists; set `orchestrator.options.html_output` from its `html_output` key (default `true` when the file or key is absent — § 4 "Project Configuration"). This single read seeds the state; all dashboard/companion gates below read `options.html_output` from state.
 5. **Create task directory**: `.maister/tasks/<type>/<YYYY-MM-DD-slug>/` plus the subdirectories this workflow owns — each SKILL.md names its own; there is no structure shared by all five workflows *(skip on resume)*
 6. **Create state file**: `orchestrator-state.yml` *(skip on resume)*
-7. **Set up operator dashboard** (§ 8) — *skip this entire step when `options.html_output` is false*: copy `../assets/dashboard.html` (sibling `assets/` directory of this references/ file) to the task root as `dashboard.html`, write the initial `dashboard-data.js`, then **auto-open it in the user's browser** with the platform opener — `open "[abs-task-path]/dashboard.html"` (macOS), `nohup xdg-open "[abs-task-path]/dashboard.html" >/dev/null 2>&1 </dev/null &` (Linux), `start "" "[abs-task-path]/dashboard.html"` (Windows). The Linux opener MUST be detached because some Chromium launchers remain attached until the browser exits and would otherwise block workflow initialization. Pass the **plain absolute filesystem path — NEVER construct a `file://` URL** (hand-built URLs get mangled, e.g. `file///` missing the colon; the opener resolves plain paths itself). If the command fails, just print the path hint — never block initialization. On resume: re-copy `dashboard.html` only if missing; regenerate `dashboard-data.js` from state; then auto-open it in the browser again (same opener as a new task — if the tab is already open the OS focuses it rather than duplicating).
+7. **Set up operator dashboard** (§ 8) — *skip this entire step when `options.html_output` is false*: run `ensure-dashboards.mjs <project-root> <task-directory>` to create or repair both dashboard HTML assets, write the initial `dashboard-data.js`, then **auto-open it in the user's browser** with the platform opener — `open "[abs-task-path]/dashboard.html"` (macOS), `nohup xdg-open "[abs-task-path]/dashboard.html" >/dev/null 2>&1 </dev/null &` (Linux), `start "" "[abs-task-path]/dashboard.html"` (Windows). The Linux opener MUST be detached because some Chromium launchers remain attached until the browser exits and would otherwise block workflow initialization. Pass the **plain absolute filesystem path — NEVER construct a `file://` URL** (hand-built URLs get mangled, e.g. `file///` missing the colon; the opener resolves plain paths itself). If the command fails, just print the path hint — never block initialization. On resume: run `ensure-dashboards.mjs` again, regenerate `dashboard-data.js` from state; then auto-open it in the browser again (same opener as a new task — if the tab is already open the OS focuses it rather than duplicating).
 8. **Create task items**: `TaskCreate` for all phases, then `TaskUpdate addBlockedBy` for dependencies. On resume, also restore completed phase statuses. When `TaskCreate`/`TaskUpdate` are unavailable in the session, record `task_ids: {}` and treat `orchestrator-state.yml` as the sole phase tracker; every other step is unchanged.
 9. **Output summary**: Show task info, phases, starting message — include the dashboard path hint `Dashboard: open [task-path]/dashboard.html in a browser to monitor progress` *only when `options.html_output` is true*.
 
@@ -488,6 +516,12 @@ Workflow artifacts accumulate deep detail for subagent context — but the human
 > **Config gate**: when `options.html_output` is false (§ 4 Project Configuration), the dashboard is DISABLED — do not copy `dashboard.html`, do not write or rewrite `dashboard-data.js`, do not auto-open a browser, and skip every rewrite trigger below. The rest of this section applies only when `html_output` is true. (`phase_summaries` in state are still maintained either way — they feed context passing, not just the dashboard.)
 
 Each task directory carries a self-contained HTML dashboard so the operator can monitor workflow progress at a glance and deep-dive only when needed.
+
+The dashboard setup instructions in individual orchestrator skills are implemented
+through `scripts/ensure-dashboards.mjs`. That script is authoritative: it compares
+both HTML files with the plugin assets and repairs stale copies, not only missing
+files. The orchestrator must run it at initialization and on every resume before
+rewriting dashboard data. It never overwrites `dashboard-data.js`.
 
 **Files** (both at task root):
 - `dashboard.html` — static viewer, copied verbatim from `[plugin]/skills/orchestrator-framework/assets/dashboard.html` at initialization (§ 5). NEVER generated or modified by the model — it is a maintained plugin asset.

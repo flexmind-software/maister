@@ -8,6 +8,37 @@ user-invocable: true
 
 Unified workflow for all development tasks — bug fixes, enhancements, and new features. Phases activate based on context and analysis findings, not predetermined task types.
 
+## Capability Discovery and Portability
+
+Before executing initialization or any phase, inspect the tools actually exposed
+by the current host. Do not assume that a tool named in this skill exists.
+Identify the available implementation for these capabilities:
+
+- task tracking (`TaskCreate`, `TaskUpdate`, or an equivalent);
+- user decision gates (`ask_user`, `request_user_input`, or an equivalent);
+- skill loading/delegation (`Skill`, `tool_search`, or an equivalent);
+- file editing, shell execution, and browser/dashboard opening.
+
+Record the result in the workflow state under
+`orchestrator.capabilities` before starting Phase 1. If the host exposes a
+tool catalog such as `ALL_TOOLS`, query it directly; otherwise inspect the
+declared tool list or use the host's tool-discovery mechanism. Never report a
+tool as available merely because this skill mentions its name.
+
+Use this fallback matrix when a Maister-specific tool is absent:
+
+| Capability | Native path | Portable fallback |
+|---|---|---|
+| Task items | `TaskCreate`/`TaskUpdate` | Persist phases, IDs, and dependencies in `orchestrator-state.yml` and update them with file editing. |
+| Decision gate | `ask_user` | If an equivalent interactive tool exists, use it. Otherwise ask the same question in a normal user-visible message and stop before continuing. |
+| Skill delegation | `Skill`/`tool_search` | Read the referenced `SKILL.md` and execute its instructions with the available file/shell tools; do not pretend a delegated call happened. |
+| Dashboard | browser/file tools | Generate and validate the dashboard artifacts; if opening a browser is unavailable, report the absolute path without blocking. |
+
+The fallback must preserve the workflow invariant, not merely skip the tool:
+state, artifacts, dependencies, summaries, gates, and verification remain
+required. If a mandatory gate cannot be represented safely, stop and ask the
+user rather than continuing silently.
+
 ## Initialization
 
 **BEFORE executing any phase, you MUST complete these steps:**
@@ -46,7 +77,7 @@ Full framework rule: `../orchestrator-framework/references/orchestrator-patterns
 2. **Create Task Items**: Use `TaskCreate` for all phases (see Phase Configuration), then set dependencies with `TaskUpdate addBlockedBy`
 3. **Create Task Directory**: `.maister/tasks/development/YYYY-MM-DD-task-name/`
 4. **Initialize State**: Create `orchestrator-state.yml` with task info and research reference
-5. **Set up Operator Dashboard** (orchestrator-patterns.md § 8) — first read `.maister/config.yml` and set `orchestrator.options.html_output` (default true if the file/key is absent) and `orchestrator.options.mockup_format` (default `html`; read by Phase 4). **When `html_output` is false, SKIP this entire step** — no `dashboard.html`, no `dashboard-data.js`, no browser auto-open — and proceed. Otherwise: copy `../orchestrator-framework/assets/dashboard.html` to the task root as `dashboard.html`, write the initial `dashboard-data.js` (all phases pending), then **auto-open it in the user's browser** (`open` / `nohup xdg-open ... >/dev/null 2>&1 </dev/null &` / `start` per platform, passing the plain absolute filesystem path — NEVER a hand-built `file://` URL). The Linux opener MUST be detached so a browser process that remains attached does not block the workflow; on failure just print the path — never block. On resume: re-copy `dashboard.html` only if missing; regenerate `dashboard-data.js` from state; then auto-open it in the browser again (same opener as a new task — the OS focuses an already-open tab rather than duplicating).
+5. **Set up Operator Dashboard** (orchestrator-patterns.md § 8) — first read `.maister/config.yml` and set `orchestrator.options.html_output` (default true if the file/key is absent) and `orchestrator.options.mockup_format` (default `html`; read by Phase 4). **When `html_output` is false, SKIP this entire step** — no `dashboard.html`, no `dashboard-data.js`, no browser auto-open — and proceed. Otherwise: run `ensure-dashboards.mjs <project-root> <task-directory>` to create or repair both dashboard HTML assets, write the initial `dashboard-data.js` (all phases pending), then **auto-open it in the user's browser** (`open` / `nohup xdg-open ... >/dev/null 2>&1 </dev/null &` / `start` per platform, passing the plain absolute filesystem path — NEVER a hand-built `file://` URL). The Linux opener MUST be detached so a browser process that remains attached does not block the workflow; on failure just print the path — never block. On resume: run `ensure-dashboards.mjs` again, regenerate `dashboard-data.js` from state; then auto-open it in the browser again (same opener as a new task — the OS focuses an already-open tab rather than duplicating).
 6. **Discover project documentation**: Read `.maister/docs/INDEX.md` (if exists), extract ALL file paths from the "Project Documentation" section. This includes predefined docs (vision, roadmap, tech-stack, architecture) AND any user-added project docs (e.g., deployment.md, api-strategy.md). Store complete list as `project_context.project_doc_paths` in state.
 
 ### Step 4: Ingest Design Context
@@ -69,7 +100,7 @@ Mockups and design artifacts become **binding inputs** to implementation when pr
 
 **Skip if no sources detected** — proceed to phase execution without `design-context/`.
 
-When `html_output` is true, also ensure `.maister/tasks/dashboard.html` exists by copying `../orchestrator-framework/assets/tasks-dashboard.html` when missing, then run the shared task-index generator and validator from `../orchestrator-framework/scripts/` against the project root.
+When `html_output` is true, run `ensure-dashboards.mjs` to create or repair the project/task dashboard assets, then run the shared task-index generator and validator from `../orchestrator-framework/scripts/` against the project root.
 
 **Output**:
 ```

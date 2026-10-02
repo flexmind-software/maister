@@ -38,6 +38,7 @@ Each orchestrator reads the framework reference file at initialization (Step 1):
 | `references/html-report-style.md` | Style guide for HTML companion reports (passed to companion-writing agents) |
 | `assets/dashboard.html` | The frozen operator dashboard, copied into every task dir |
 | `assets/tasks-dashboard.html` | Central cross-task dashboard template, copied to `.maister/tasks/dashboard.html` |
+| `scripts/ensure-dashboards.mjs` | Repairs missing or stale project/task dashboard assets |
 | `scripts/generate-task-index.mjs` | Scans task state files and writes the central task list projection |
 | `scripts/validate-task-index.mjs` | Validates the central task list projection |
 
@@ -80,8 +81,11 @@ In addition to each task's self-contained dashboard, every orchestrator maintain
 project-level task index when `orchestrator.options.html_output` is enabled. The
 index is a generated projection, not a second source of truth:
 
-1. Copy `assets/tasks-dashboard.html` to `.maister/tasks/dashboard.html` if it is
-   missing.
+1. Run `node <plugin>/skills/orchestrator-framework/scripts/ensure-dashboards.mjs
+   <project-root> [task-directory]`. It creates or repairs the project dashboard
+   and, when a task directory is provided, that task's dashboard. The files are
+   synchronized by SHA-256 against the plugin assets, so stale copies are repaired
+   as well as missing files. When `html_output: false`, the command is a no-op.
 2. Run `node <plugin>/skills/orchestrator-framework/scripts/generate-task-index.mjs
    <project-root>` after task initialization/resume and after every state/dashboard
    rewrite trigger.

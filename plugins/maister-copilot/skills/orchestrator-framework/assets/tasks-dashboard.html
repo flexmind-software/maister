@@ -3,21 +3,52 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Maister Tasks</title>
+<title>Maister · Workflow index</title>
 <style>
 :root{color-scheme:light dark;--bg:#f6f7f9;--card:#fff;--text:#1a1d23;--muted:#6b7280;--border:#e2e5ea;--accent:#4f46e5;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--info:#2563eb}
 @media(prefers-color-scheme:dark){:root{--bg:#111418;--card:#1a1f26;--text:#e6e9ee;--muted:#9aa4b2;--border:#2e3640;--accent:#818cf8;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--info:#60a5fa}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,sans-serif}.wrap{max-width:1400px;margin:auto;padding:28px 20px 60px}h1{margin:0;font-size:26px}.sub{color:var(--muted);margin:5px 0 20px}.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}.toolbar input,.toolbar select{background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:8px 10px}.toolbar input{min-width:260px}.summary{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}.pill{background:var(--card);border:1px solid var(--border);border-radius:999px;padding:5px 11px;color:var(--muted)}.pill b{color:var(--text)}.card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:auto}table{border-collapse:collapse;width:100%;min-width:960px}th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--border);vertical-align:top}th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);white-space:nowrap}tr:last-child td{border-bottom:0}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}.type{font-size:11px;text-transform:uppercase;color:var(--accent);font-weight:700}.badge{display:inline-block;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:700}.in_progress{color:var(--info);background:color-mix(in srgb,var(--info) 15%,transparent)}.completed{color:var(--ok);background:color-mix(in srgb,var(--ok) 15%,transparent)}.failed,.blocked{color:var(--bad);background:color-mix(in srgb,var(--bad) 15%,transparent)}.pending{color:var(--muted);background:var(--bg)}.next{color:var(--muted);max-width:330px}.empty{text-align:center;color:var(--muted);padding:30px}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,sans-serif}.wrap{max-width:1480px;margin:auto;padding:28px 20px 60px}h1{margin:0;font-size:28px}.summary{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}.pill{background:var(--card);border:1px solid var(--border);border-radius:999px;padding:5px 11px;color:var(--muted);cursor:pointer;font:inherit}.pill:hover,.pill.active{border-color:var(--accent);color:var(--accent)}.pill b{color:var(--text)}.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}.toolbar input,.toolbar select{background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:7px;padding:9px 10px}.toolbar input{min-width:280px}.card{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:auto}table{border-collapse:collapse;width:100%;min-width:1100px}th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--border);vertical-align:top}th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);white-space:nowrap}tr:last-child td{border-bottom:0}a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}.type{font-size:11px;text-transform:uppercase;color:var(--accent);font-weight:700}.task-description{margin-top:4px;color:var(--muted);font-size:13px;line-height:1.4}.task-type{display:inline-block;margin-top:6px}.workflow-badge{display:inline-flex;align-items:center;padding:5px 10px;border:1px solid transparent;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.02em;line-height:1;box-shadow:0 1px 2px rgba(16,24,40,.08)}.workflow-development{color:#1d4ed8;background:#eff6ff;border-color:#bfdbfe}.workflow-research{color:#7e22ce;background:#faf5ff;border-color:#e9d5ff}.workflow-performance{color:#c2410c;background:#fff7ed;border-color:#fed7aa}.workflow-migration{color:#0f766e;background:#f0fdfa;border-color:#99f6e4}.workflow-product-design{color:#be185d;background:#fdf2f8;border-color:#fbcfe8}.badge{display:inline-block;white-space:nowrap;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:700}.in_progress{color:var(--info);background:color-mix(in srgb,var(--info) 15%,transparent)}.completed{color:var(--ok);background:color-mix(in srgb,var(--ok) 15%,transparent)}.failed,.blocked{color:var(--bad);background:color-mix(in srgb,var(--bad) 15%,transparent)}.pending{color:var(--muted);background:var(--bg)}.next{color:var(--muted);max-width:330px}.commit{font-size:12px}.commit-message{color:var(--muted)}.empty{text-align:center;color:var(--muted);padding:30px}footer{margin-top:16px;color:var(--muted);font-size:12px}
+@media(prefers-color-scheme:dark){.workflow-development{color:#93c5fd;background:#172554;border-color:#1e40af}.workflow-research{color:#d8b4fe;background:#3b0764;border-color:#7e22ce}.workflow-performance{color:#fdba74;background:#431407;border-color:#c2410c}.workflow-migration{color:#99f6e4;background:#042f2e;border-color:#0f766e}.workflow-product-design{color:#f9a8d4;background:#500724;border-color:#be185d}}
 </style>
 </head>
-<body><main class="wrap">
-<h1>Maister tasks</h1><div id="sub" class="sub"></div>
-<div id="summary" class="summary"></div>
-<div class="toolbar"><input id="search" placeholder="Search tasks…"><select id="type"><option value="">All types</option></select><select id="status"><option value="">All statuses</option></select></div>
-<div class="card"><table><thead><tr><th>Type</th><th>Name</th><th>Description</th><th>Status</th><th>Next action</th><th>Commit</th><th>Updated</th></tr></thead><tbody id="rows"></tbody></table></div>
-</main><script src="dashboard-data.js"></script><script>
-const data=window.MAISTER_TASK_INDEX||{tasks:[]},tasks=data.tasks||[];const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const types=[...new Set(tasks.map(t=>t.type))].sort(),statuses=[...new Set(tasks.map(t=>t.status))].sort();for(const [id,values] of [['type',types],['status',statuses]])for(const v of values)document.getElementById(id).insertAdjacentHTML('beforeend',`<option value="${esc(v)}">${esc(v)}</option>`);
-function render(){const q=document.getElementById('search').value.toLowerCase(),type=document.getElementById('type').value,status=document.getElementById('status').value;const shown=tasks.filter(t=>(!q||JSON.stringify(t).toLowerCase().includes(q))&&(!type||t.type===type)&&(!status||t.status===status));document.getElementById('rows').innerHTML=shown.length?shown.map(t=>{const commit=t.commit_status==='committed'?`${esc(t.commit_sha||'committed')}<br><span class="sub">${esc(t.commit_message||'')}</span>`:`<span class="sub">${esc(t.commit_status||'not recorded')}</span>`;return `<tr><td><span class="type">${esc(t.type)}</span></td><td><a href="${esc(t.dashboard)}"><strong>${esc(t.name)}</strong></a><br><a class="sub" href="${esc(t.state)}">state</a></td><td>${esc(t.description)}</td><td><span class="badge ${esc(t.status)}">${esc(t.status)}</span></td><td class="next">${esc(t.next_action)}</td><td>${commit}</td><td>${esc(t.updated||'—')}</td></tr>`}).join(''):'<tr><td colspan="7" class="empty">No tasks match the filter.</td></tr>';document.getElementById('summary').innerHTML=statuses.map(s=>`<span class="pill">${esc(s)} <b>${tasks.filter(t=>t.status===s).length}</b></span>`).join('');document.getElementById('sub').textContent=`${tasks.length} tasks · generated ${data.generated||'—'}`}
-for(const id of ['search','type','status'])document.getElementById(id).addEventListener('input',render);render();
-</script></body></html>
+<body>
+<main class="wrap">
+  <header>
+    <h1>Maister · Workflow index</h1>
+  </header>
+  <section id="summary" class="summary" aria-label="Task summary"></section>
+  <section class="toolbar" aria-label="Task filters">
+    <input id="search" placeholder="Search tasks, decisions, or next action…" aria-label="Search tasks">
+    <select id="type" aria-label="Filter by workflow type"><option value="">All workflow types</option></select>
+    <select id="status" aria-label="Filter by status"><option value="">All statuses</option></select>
+  </section>
+  <section class="card" aria-label="Maister tasks">
+    <table><thead><tr><th>Task</th><th>Status</th><th>Next action</th><th>Commit</th><th>Updated</th></tr></thead><tbody id="rows"></tbody></table>
+  </section>
+  <footer>Maister operator index · open a task dashboard for phase-level decisions, artifacts, gates, risks, and verification.</footer>
+</main>
+<script src="dashboard-data.js"></script>
+<script>
+"use strict";
+const data=window.MAISTER_TASK_INDEX||{tasks:[]},tasks=data.tasks||[];
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+const formatLocalDateTime=value=>{if(!value)return "—";const date=new Date(value);if(Number.isNaN(date.getTime()))return String(value);const parts=new Intl.DateTimeFormat(undefined,{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"}).formatToParts(date);const get=type=>parts.find(part=>part.type===type)?.value||"00";return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")}`};
+const statusRank={pending:0,in_progress:1,completed:2};
+const workflowClass=value=>`workflow-${String(value||"unknown").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"unknown"}`;
+const types=[...new Set(tasks.map(t=>t.type))].sort(),statuses=["in_progress","pending","blocked","failed","completed"].filter(s=>tasks.some(t=>t.status===s));
+for(const [id,values] of [["type",types],["status",statuses]])for(const v of values)document.getElementById(id).insertAdjacentHTML("beforeend",`<option value="${esc(v)}">${esc(v.replace(/_/g," "))}</option>`);
+function render(){
+  const q=document.getElementById("search").value.toLowerCase(),type=document.getElementById("type").value,status=document.getElementById("status").value;
+  const shown=tasks.filter(t=>(!q||JSON.stringify(t).toLowerCase().includes(q))&&(!type||t.type===type)&&(!status||t.status===status)).sort((a,b)=>(statusRank[a.status]??99)-(statusRank[b.status]??99));
+  document.getElementById("rows").innerHTML=shown.length?shown.map(t=>{
+    const commit=t.commit_status==="committed"?`${esc(t.commit_sha||"committed")}<br><span class="commit-message">${esc(t.commit_message||"")}</span>`:`<span class="commit-message">${esc(t.commit_status||"not recorded")}</span>`;
+    const nextAction=t.status==="completed"?"":esc(t.next_action);
+    return `<tr><td><a href="${esc(t.dashboard)}"><strong>${esc(t.name)}</strong></a><div class="task-description">${esc(t.description)}</div><span class="type task-type workflow-badge ${workflowClass(t.type)}">${esc(t.type)}</span></td><td><span class="badge ${esc(t.status)}">${esc(t.status.replace(/_/g," "))}</span></td><td class="next">${nextAction}</td><td class="commit">${commit}</td><td>${esc(formatLocalDateTime(t.updated))}</td></tr>`;
+  }).join(""):"<tr><td colspan=\"5\" class=\"empty\">No tasks match the selected ritual filters.</td></tr>";
+  document.getElementById("summary").innerHTML=statuses.map(s=>`<button type="button" class="pill status-filter${status===s?" active":""}" data-status="${esc(s)}">${esc(s.replace(/_/g," "))} <b>${tasks.filter(t=>t.status===s).length}</b></button>`).join("");
+  document.querySelectorAll(".status-filter").forEach(button=>button.addEventListener("click",()=>{const statusSelect=document.getElementById("status");statusSelect.value=statusSelect.value===button.dataset.status?"":button.dataset.status;render()}));
+}
+for(const id of ["search","type","status"])document.getElementById(id).addEventListener("input",render);render();
+</script>
+</body>
+</html>
