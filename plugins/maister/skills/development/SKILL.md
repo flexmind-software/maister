@@ -22,6 +22,8 @@ If you find yourself reasoning "the user has been approving everything, so I can
 
 Full framework rule: `../orchestrator-framework/references/orchestrator-patterns.md` § 2 and § 2.1.
 
+When a phase summary contains decisions or risks, the dashboard projection MUST include the same ordered values and a `summary_keys` mapping. Run `validate-dashboard-state-sync.mjs` before presenting the gate and stop on mismatch; never present an incomplete dashboard.
+
 ### Step 1: Load Framework Patterns
 
 **Read the framework reference file NOW using the Read tool:**
@@ -87,6 +89,8 @@ Starting Phase 1: Codebase Analysis...
 > **Config gate**: these rules assume `options.html_output` is true (read from `.maister/config.yml` at init, default true). When **false**: skip rule 2 entirely (no dashboard — no `dashboard.html`/`dashboard-data.js`, no browser open, no rewrites) and rule 3's companions (do NOT pass `html_style_guide_path`; subagents write md only). Rule 1 (§ 7 TL;DR blocks) and `phase_summaries` in state stay active either way.
 
 Cross-cutting rules from `orchestrator-patterns.md` apply throughout this workflow:
+
+Before every gate and finalization, validate the dashboard/state projection with `validate-dashboard-state-sync.mjs`. A dashboard showing “No decisions recorded yet” while `phase_summaries` contains decisions is a workflow error.
 
 1. **Artifact Summary Contract (§ 7)**: every artifact-writing subagent prompt MUST include the contract instruction (artifacts open with TL;DR / Key Decisions / Open Questions / Risks (the writer heading is `## Open Questions / Risks`)). At context extraction, lift `decisions`, `risks`, and `artifacts` into `phase_summaries.[phase]` (shared entry shape, § 4).
 2. **Dashboard upkeep (§ 8)**: rewrite `dashboard-data.js` at every phase START (mark it `in_progress` before delegating), **BEFORE firing every exit gate** (register the finished phase's artifacts/summary/decisions/risks so the operator reviews them on the dashboard while answering — status stays `in_progress` until the gate passes), after every phase completion (including skips, with reason), every gate decision, every verification cycle, and at finalization. It is a terse projection of state — never duplicate artifact content into it.

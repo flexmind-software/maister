@@ -37,6 +37,7 @@ Each orchestrator reads the framework reference file at initialization (Step 1):
 | `references/orchestrator-creation-checklist.md` | Authoring checklist for creating new orchestrators (not loaded at runtime) |
 | `references/html-report-style.md` | Style guide for HTML companion reports (passed to companion-writing agents) |
 | `assets/dashboard.html` | The frozen operator dashboard, copied into every task dir |
+| `scripts/validate-dashboard-state-sync.mjs` | Verifies phase decisions/risks are projected from state into the task dashboard |
 
 ## Key Principles
 
@@ -70,3 +71,14 @@ This skill does NOT get invoked directly. It exists to:
 3. Enable consistent behavior across all orchestrators
 
 When building new orchestrators, reference these patterns rather than duplicating them.
+
+## Dashboard projection consistency
+
+The task dashboard is a projection of `orchestrator-state.yml`, not an independent source of decisions. Before every gate and during finalization, run:
+
+```bash
+node <plugin>/skills/orchestrator-framework/scripts/validate-dashboard-state-sync.mjs \
+  <task-directory>/dashboard-data.js <task-directory>/orchestrator-state.yml
+```
+
+A phase dashboard entry that projects decisions or risks must declare `summary_keys` matching the corresponding `phase_summaries` keys. The validator compares ordered values and fails on omissions, stale text or unmapped summaries.

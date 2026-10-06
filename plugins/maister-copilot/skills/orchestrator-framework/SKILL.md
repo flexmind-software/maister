@@ -1,7 +1,6 @@
 ---
 name: orchestrator-framework
 description: Shared orchestration patterns for all workflow orchestrators. NOT an executable skill - provides reference documentation for phase execution, state management, phase gates, and initialization. All orchestrators reference these patterns.
-user-invocable: false
 ---
 
 # Orchestrator Framework
@@ -41,6 +40,7 @@ Each orchestrator reads the framework reference file at initialization (Step 1):
 | `scripts/ensure-dashboards.mjs` | Repairs missing or stale project/task dashboard assets |
 | `scripts/generate-task-index.mjs` | Scans task state files and writes the central task list projection |
 | `scripts/validate-task-index.mjs` | Validates the central task list projection |
+| `scripts/validate-dashboard-state-sync.mjs` | Verifies phase decisions/risks are projected from state into the task dashboard |
 
 ## Key Principles
 
@@ -52,6 +52,12 @@ All orchestrators follow these principles:
 4. **User-Confirmed Rollback**: Never auto-rollback without user approval
 5. **Task Progress**: Always track progress with TaskCreate/TaskUpdate tools
 6. **Standards Discovery**: Reference `.maister/docs/INDEX.md` throughout
+
+When `TaskCreate`/`TaskUpdate`, `Skill`, or browser tools are not exposed, the
+portable implementation is not a skip: use the available `exec_command` and
+`apply_patch` tools, persist task state in `orchestrator-state.yml`, and run
+the dashboard scripts and validators described below. Native tool names must
+never be claimed when they were not available.
 
 ## Orchestrators Using This Framework
 
@@ -92,6 +98,20 @@ index is a generated projection, not a second source of truth:
 3. Validate the result with
    `node <plugin>/skills/orchestrator-framework/scripts/validate-task-index.mjs
    <project-root>/.maister/tasks/dashboard-data.js`.
+4. Validate the active task dashboard against its source state with
+   `node <plugin>/skills/orchestrator-framework/scripts/validate-dashboard-state-sync.mjs
+   <task-directory>/dashboard-data.js <task-directory>/orchestrator-state.yml`.
+   A phase dashboard entry that projects decisions or risks must declare
+   `summary_keys` matching the corresponding `phase_summaries` keys. The
+   validator compares ordered values and fails on omissions, stale text or
+   unmapped summaries.
+
+If native dashboard or browser tooling is absent, run all three commands above
+through `exec_command` anyway. Opening the HTML file is optional; generation,
+central-index refresh and validation are mandatory. After each run, verify that
+the central index contains the active task's path, status and a non-null
+`updated`; the generator falls back to the state-file modification time for
+legacy states without an explicit timestamp.
 
 The generator scans `.maister/tasks/<type>/*/orchestrator-state.yml` for all
 framework task types and exposes type, title, short description, status, next

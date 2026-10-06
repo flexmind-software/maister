@@ -25,6 +25,12 @@ capability if one exists; otherwise use the following portable fallbacks:
 - Browser opening: generate and validate dashboard artifacts, report the
   absolute path, and continue only when opening the browser is optional.
 
+When native dashboard/browser tooling is absent, use `exec_command` to run the
+shared dashboard scripts and use `apply_patch` only for a scoped repair. The
+portable path still MUST run `ensure-dashboards.mjs`,
+`generate-task-index.mjs`, `validate-dashboard-data.mjs`, and
+`validate-task-index.mjs`; browser opening is the only optional operation.
+
 Fallbacks must preserve all state, dependency, artifact, gate, and verification
 invariants. An orchestrator MUST NOT claim that a native tool call occurred
 when it did not. If no safe equivalent exists for a mandatory operation, stop
@@ -195,6 +201,11 @@ prompt: |
   ## ARTIFACTS TO READ
   [List relevant files for full details]
 
+  ## ORIGINAL USER REQUEST
+  Read `[task_path]/input/user-request.md` for the exact original request.
+  Treat `task.description` and phase summaries as indexed context only; they
+  are not a lossless replacement for this artifact.
+
   ## ARTIFACT SUMMARY CONTRACT
   Open every markdown artifact you write with the summary block from
   orchestrator-patterns.md § 7 (TL;DR / Key Decisions / Open Questions / Risks).
@@ -312,6 +323,7 @@ orchestrator:
 task:
   title: [human-readable task title]
   description: [full task description]
+  input_artifact: input/user-request.md
   status: pending | in_progress | completed | failed | blocked
   tags: []
   priority: null  # high | medium | low
@@ -401,13 +413,15 @@ phase_summaries:
 
 ### Initialization Steps
 
-1. **Parse arguments**: Extract description, type, entry point (`--from`), optional flags
+0. **Capture the raw invocation payload before interpretation**: preserve the complete user-provided payload that follows the Maister skill invocation marker (for example, everything after `$maister-copilot:development`). Keep headings, paragraphs, lists, blockquotes, identifiers, examples, and acceptance criteria verbatim. Do not derive this payload from a generated title, a one-line task description, a task slug, a requirements summary, or `phase_summaries`.
+1. **Parse arguments**: Extract description, type, entry point (`--from`), optional flags, while keeping the raw invocation payload from step 0 unchanged
 2. **Determine starting phase**: New task starts Phase 1; resume reads state for first incomplete phase
 3. **Capture the clock**: run `date -u +"%Y-%m-%dT%H:%M:%SZ"` via Bash NOW — you do NOT know the time from context. Use the result for every timestamp written in this turn (`created`, `updated`, `generated`, `phases[].started`). This is a MANDATORY step, not optional: writing `created: 2026-06-12` or `T00:00:00Z` without having run `date` is the documented failure mode (§ 4 Timestamp Rule).
 4. **Read project config**: read `.maister/config.yml` if it exists; set `orchestrator.options.html_output` from its `html_output` key (default `true` when the file or key is absent — § 4 "Project Configuration"). This single read seeds the state; all dashboard/companion gates below read `options.html_output` from state.
 5. **Create task directory**: `.maister/tasks/<type>/<YYYY-MM-DD-slug>/` plus the subdirectories this workflow owns — each SKILL.md names its own; there is no structure shared by all five workflows *(skip on resume)*
-6. **Create state file**: `orchestrator-state.yml` *(skip on resume)*
-7. **Set up operator dashboard** (§ 8) — *skip this entire step when `options.html_output` is false*: run `ensure-dashboards.mjs <project-root> <task-directory>` to create or repair both dashboard HTML assets, write the initial `dashboard-data.js`, then **auto-open it in the user's browser** with the platform opener — `open "[abs-task-path]/dashboard.html"` (macOS), `nohup xdg-open "[abs-task-path]/dashboard.html" >/dev/null 2>&1 </dev/null &` (Linux), `start "" "[abs-task-path]/dashboard.html"` (Windows). The Linux opener MUST be detached because some Chromium launchers remain attached until the browser exits and would otherwise block workflow initialization. Pass the **plain absolute filesystem path — NEVER construct a `file://` URL** (hand-built URLs get mangled, e.g. `file///` missing the colon; the opener resolves plain paths itself). If the command fails, just print the path hint — never block initialization. On resume: run `ensure-dashboards.mjs` again, regenerate `dashboard-data.js` from state; then auto-open it in the browser again (same opener as a new task — if the tab is already open the OS focuses it rather than duplicating).
+6. **Capture the original request**: create `input/user-request.md` and write the raw invocation payload from step 0 under `## Raw user request`. Do not summarize, truncate, normalize, or replace it with `task.description`. Include only minimal metadata around it (capture timestamp, workflow type, and invocation flags). Register the relative path in `task.input_artifact`. On resume, verify this file exists before continuing and treat it as the canonical source for the original request; never reconstruct the original request from summaries.
+7. **Create state file**: `orchestrator-state.yml` *(skip on resume)*
+8. **Set up operator dashboard** (§ 8) — *skip this entire step when `options.html_output` is false*: run `ensure-dashboards.mjs <project-root> <task-directory>` to create or repair both dashboard HTML assets, write the initial `dashboard-data.js`, then **auto-open it in the user's browser** with the platform opener — `open "[abs-task-path]/dashboard.html"` (macOS), `nohup xdg-open "[abs-task-path]/dashboard.html" >/dev/null 2>&1 </dev/null &` (Linux), `start "" "[abs-task-path]/dashboard.html"` (Windows). The Linux opener MUST be detached because some Chromium launchers remain attached until the browser exits and would otherwise block workflow initialization. Pass the **plain absolute filesystem path — NEVER construct a `file://` URL** (hand-built URLs get mangled, e.g. `file///` missing the colon; the opener resolves plain paths itself). If the command fails, just print the path hint — never block initialization. On resume: run `ensure-dashboards.mjs` again, regenerate `dashboard-data.js` from state; then auto-open it in the browser again (same opener as a new task — if the tab is already open the OS focuses it rather than duplicating).
 8. **Create task items**: `TaskCreate` for all phases, then `TaskUpdate addBlockedBy` for dependencies. On resume, also restore completed phase statuses. When `TaskCreate`/`TaskUpdate` are unavailable in the session, record `task_ids: {}` and treat `orchestrator-state.yml` as the sole phase tracker; every other step is unchanged.
 9. **Output summary**: Show task info, phases, starting message — include the dashboard path hint `Dashboard: open [task-path]/dashboard.html in a browser to monitor progress` *only when `options.html_output` is true*.
 
@@ -550,6 +564,12 @@ script.
 
 When `html_output` is false, all dashboard rewrites are skipped. A failed interior rewrite must be recorded in the relevant work-log or phase summary but must not block the workflow.
 
+The central project index is part of the dashboard contract. After every task
+dashboard rewrite trigger, regenerate and validate
+`.maister/tasks/dashboard-data.js` through the shared scripts, and verify that
+the active task path and status are present. A valid task-level dashboard does
+not replace this central-index update.
+
 **Projection validation (mandatory):** after every rewrite, run
 `node ../orchestrator-framework/scripts/validate-dashboard-data.mjs <task-path>/dashboard-data.js`
 from the plugin skills directory. Do not leave a failed projection in place. The
@@ -637,6 +657,12 @@ decisions, verification cycles, and finalization. The central asset is copied
 only when missing; never overwrite an operator's task state or individual task
 dashboard data. The generated `dashboard-data.js` is a projection and may be
 regenerated at any time.
+
+The generator resolves the central-index `updated` value in this order:
+`task.updated`, `orchestrator.updated`, then the modification time of
+`orchestrator-state.yml`. Legacy states must therefore still receive a
+non-null sortable timestamp in the generated index; the source state is not
+mutated by this fallback.
 
 ---
 

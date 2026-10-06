@@ -27,6 +27,7 @@ function scalar(value) {
 
 function readTaskState(statePath, type, taskDirectory) {
   const lines = fs.readFileSync(statePath, "utf8").split(/\r?\n/);
+  const stateFileUpdated = fs.statSync(statePath).mtime.toISOString();
   let section = null;
   let title = "";
   let description = "";
@@ -46,25 +47,30 @@ function readTaskState(statePath, type, taskDirectory) {
   for (const line of lines) {
     const verificationMatch = line.match(/^  last_status:\s*(.*)$/);
     if (verificationMatch) verificationStatus = scalar(verificationMatch[1]);
-    if (/^task:\s*$/.test(line)) { section = "task"; readingDescription = false; continue; }
+    if (/^(?:  )?task:\s*$/.test(line)) { section = "task"; readingDescription = false; continue; }
+    if (/^(?:  )?verification_context:\s*$/.test(line)) { section = "verification"; readingDescription = false; continue; }
     if (/^orchestrator:\s*$/.test(line)) { section = "orchestrator"; readingDescription = false; continue; }
-    if (/^commit:\s*$/.test(line)) { section = "commit"; readingDescription = false; continue; }
+    if (/^(?:  )?commit:\s*$/.test(line)) { section = "commit"; readingDescription = false; continue; }
     if (/^[^ \t].*:\s*$/.test(line)) { section = null; readingDescription = false; continue; }
 
     if (section === "task") {
-      const match = line.match(/^  (title|name|description|status|pause_requested|resume_from):\s*(.*)$/);
+      // Task states exist in both the legacy four-space and current two-space
+      // YAML layouts. Read direct task fields from either layout; nested phase
+      // fields are not visited while section === "task".
+      const match = line.match(/^ {2,4}(title|name|description|status|updated|pause_requested|resume_from):\s*(.*)$/);
       if (match) {
         const [, key, raw] = match;
         readingDescription = key === "description" && /^(>|\|-)/.test(raw.trim());
         if (key === "title" || (key === "name" && !title)) title = scalar(raw);
         if (key === "description" && raw.trim() && !/^(>|\|-)/.test(raw.trim())) description = scalar(raw);
         if (key === "status") status = scalar(raw);
+        if (key === "updated") updated = scalar(raw);
         if (key === "pause_requested") pauseRequested = scalar(raw) === "true";
         if (key === "resume_from") resumeFrom = scalar(raw);
         continue;
       }
       if (readingDescription) {
-        const continuation = line.match(/^    (.+)$/);
+        const continuation = line.match(/^ {2,4}(.+)$/);
         if (continuation && !description) description = continuation[1].trim();
       }
     }
@@ -83,8 +89,13 @@ function readTaskState(statePath, type, taskDirectory) {
       if (pendingMatch && pending.length < 3) pending.push(scalar(pendingMatch[1]));
     }
 
+    if (section === "verification") {
+      const match = line.match(/^    status:\s*(.*)$/);
+      if (match) verificationStatus = scalar(match[1]);
+    }
+
     if (section === "commit") {
-      const match = line.match(/^  (status|sha|message):\s*(.*)$/);
+      const match = line.match(/^    (status|sha|message):\s*(.*)$/);
       if (match) {
         const [, key, raw] = match;
         if (key === "status") commitStatus = scalar(raw) || "not_recorded";
@@ -103,6 +114,8 @@ function readTaskState(statePath, type, taskDirectory) {
         ? verificationStatus === "passed_with_issues"
           ? "Zakończone z uwagami — sprawdzić raport weryfikacji"
           : "Brak — zakończone"
+        : status === "superseded"
+          ? "Zastąpione — kontynuować zadanie powiązane"
         : status === "failed" || status === "blocked"
           ? "Wymaga analizy i wznowienia"
           : "Uruchomić zadanie";
@@ -113,7 +126,10 @@ function readTaskState(statePath, type, taskDirectory) {
     description: description || "Brak opisu",
     status,
     next_action: nextAction,
-    updated: updated || null,
+    // Keep the central index sortable for legacy states that omitted both
+    // task.updated and orchestrator.updated. This is a projection fallback;
+    // it does not mutate the source-of-truth state.
+    updated: updated || stateFileUpdated,
     path: relativeDirectory,
     dashboard: `${relativeDirectory}/dashboard.html`,
     state: `${relativeDirectory}/orchestrator-state.yml`,

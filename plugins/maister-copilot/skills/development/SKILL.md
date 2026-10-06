@@ -1,7 +1,6 @@
 ---
 name: development
 description: Unified orchestrator for all development tasks. ALWAYS execute when invoked — never skip for 'straightforward' tasks. Phases adapt based on detected task characteristics rather than predetermined types. Use for any development work that modifies code.
-user-invocable: true
 ---
 
 # Development Orchestrator
@@ -32,12 +31,21 @@ Use this fallback matrix when a Maister-specific tool is absent:
 | Task items | `TaskCreate`/`TaskUpdate` | Persist phases, IDs, and dependencies in `orchestrator-state.yml` and update them with file editing. |
 | Decision gate | `ask_user` | If an equivalent interactive tool exists, use it. Otherwise ask the same question in a normal user-visible message and stop before continuing. |
 | Skill delegation | `Skill`/`tool_search` | Read the referenced `SKILL.md` and execute its instructions with the available file/shell tools; do not pretend a delegated call happened. |
-| Dashboard | browser/file tools | Generate and validate the dashboard artifacts; if opening a browser is unavailable, report the absolute path without blocking. |
+| Dashboard | browser/file tools | Run the Maister dashboard scripts through `exec_command`; if opening a browser is unavailable, report the absolute path without blocking. |
 
 The fallback must preserve the workflow invariant, not merely skip the tool:
 state, artifacts, dependencies, summaries, gates, and verification remain
 required. If a mandatory gate cannot be represented safely, stop and ask the
 user rather than continuing silently.
+
+**Portable dashboard execution is mandatory when native dashboard/browser tools
+are absent.** Use `exec_command` to run the plugin's
+`orchestrator-framework/scripts/ensure-dashboards.mjs`,
+`generate-task-index.mjs` and the matching validators, including
+`validate-dashboard-state-sync.mjs`. Do not treat a missing
+browser opener as a reason to skip generation or central-index updates. Use
+`apply_patch` only for a narrowly scoped repair when a shared script cannot
+perform the required update, and record that repair in the workflow state.
 
 ## Initialization
 
@@ -59,6 +67,13 @@ Full framework rule: `../orchestrator-framework/references/orchestrator-patterns
 
 1. `../orchestrator-framework/references/orchestrator-patterns.md` - Delegation rules, interactive mode, state schema, initialization, context passing, issue resolution
 
+**Raw request preservation**: before generating a task title, slug, one-line
+description, or any phase summary, retain the complete payload supplied after
+the `$maister-copilot:development` marker. The payload is the user's source
+record. Do not use a paraphrase produced by the host, the task title, or a
+shortened `task.description` as a substitute. The first durable task artifact
+must contain that payload verbatim under `## Raw user request`.
+
 ### Step 2: Detect Research Context
 
 **If argument is a research folder path** (matches `.maister/tasks/research/*`):
@@ -76,7 +91,8 @@ Full framework rule: `../orchestrator-framework/references/orchestrator-patterns
 1. **Capture the clock**: run `date -u +"%Y-%m-%dT%H:%M:%SZ"` via Bash NOW — you do NOT know the time from context. Every timestamp written this turn (`created`, `updated`, `generated`, `phases[].started`) uses this value. Date-only or `T00:00:00Z` values are the documented failure mode (orchestrator-patterns.md § 4 Timestamp Rule). Re-run `date` in later turns before writing timestamps.
 2. **Create Task Items**: Use `TaskCreate` for all phases (see Phase Configuration), then set dependencies with `TaskUpdate addBlockedBy`
 3. **Create Task Directory**: `.maister/tasks/development/YYYY-MM-DD-task-name/`
-4. **Initialize State**: Create `orchestrator-state.yml` with task info and research reference
+4. **Capture the original request**: follow the shared input-artifact contract in `orchestrator-patterns.md` and write `input/user-request.md` before summarization or requirements gathering.
+4a. **Initialize State**: Create `orchestrator-state.yml` with `task.input_artifact: input/user-request.md`, task info, and research reference
 5. **Set up Operator Dashboard** (orchestrator-patterns.md § 8) — first read `.maister/config.yml` and set `orchestrator.options.html_output` (default true if the file/key is absent) and `orchestrator.options.mockup_format` (default `html`; read by Phase 4). **When `html_output` is false, SKIP this entire step** — no `dashboard.html`, no `dashboard-data.js`, no browser auto-open — and proceed. Otherwise: run `ensure-dashboards.mjs <project-root> <task-directory>` to create or repair both dashboard HTML assets, write the initial `dashboard-data.js` (all phases pending), then **auto-open it in the user's browser** (`open` / `nohup xdg-open ... >/dev/null 2>&1 </dev/null &` / `start` per platform, passing the plain absolute filesystem path — NEVER a hand-built `file://` URL). The Linux opener MUST be detached so a browser process that remains attached does not block the workflow; on failure just print the path — never block. On resume: run `ensure-dashboards.mjs` again, regenerate `dashboard-data.js` from state; then auto-open it in the browser again (same opener as a new task — the OS focuses an already-open tab rather than duplicating).
 6. **Discover project documentation**: Read `.maister/docs/INDEX.md` (if exists), extract ALL file paths from the "Project Documentation" section. This includes predefined docs (vision, roadmap, tech-stack, architecture) AND any user-added project docs (e.g., deployment.md, api-strategy.md). Store complete list as `project_context.project_doc_paths` in state.
 
@@ -102,6 +118,16 @@ Mockups and design artifacts become **binding inputs** to implementation when pr
 
 When `html_output` is true, run `ensure-dashboards.mjs` to create or repair the project/task dashboard assets, then run the shared task-index generator and validator from `../orchestrator-framework/scripts/` against the project root.
 
+When the native dashboard helper is unavailable, the same operations MUST be
+performed with `exec_command` using the plugin script paths. On every resume
+and finalization, verify that the project-level `.maister/tasks/dashboard.html`
+and `.maister/tasks/dashboard-data.js` include the resumed task, then run
+`validate-task-index.mjs` and `validate-dashboard-state-sync.mjs` against the
+active task's dashboard and state; a task-level dashboard alone is insufficient. The
+central index generator must project `task.updated` first, then
+`orchestrator.updated`, and finally the state-file modification time for legacy
+states that contain neither field; it must never emit `updated: null`.
+
 **Output**:
 ```
 🚀 Development Orchestrator Started
@@ -122,6 +148,8 @@ Starting Phase 1: Codebase Analysis...
 After every task-level dashboard rewrite trigger, refresh and validate the project-level task index with the shared generator and validator described in orchestrator-framework § 8.1. Skip this whenever `html_output` is false.
 
 Cross-cutting rules from `orchestrator-patterns.md` apply throughout this workflow:
+
+Dashboard projections must also be state-consistent: every phase entry that projects a `phase_summaries` decision or risk MUST include `summary_keys` and copy the ordered values exactly. Run `validate-dashboard-state-sync.mjs` before presenting the gate; stop on any mismatch instead of showing an incomplete dashboard.
 
 1. **Artifact Summary Contract (§ 7)**: every artifact-writing subagent prompt MUST include the contract instruction (artifacts open with TL;DR / Key Decisions / Open Questions / Risks (the writer heading is `## Open Questions / Risks`)). At context extraction, lift `decisions`, `risks`, and `artifacts` into `phase_summaries.[phase]` (shared entry shape, § 4).
 2. **Dashboard upkeep (§ 8)**: rewrite `dashboard-data.js` at every phase START (mark it `in_progress` before delegating), **BEFORE firing every exit gate** (register the finished phase's artifacts/summary/decisions/risks so the operator reviews them on the dashboard while answering — status stays `in_progress` until the gate passes), after every phase completion (including skips, with reason), every gate decision, every verification cycle, and at finalization. It is a terse projection of state — never duplicate artifact content into it.
