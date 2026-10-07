@@ -1,6 +1,6 @@
 ---
 name: task-classifier
-description: Task classification specialist analyzing task descriptions and issue references to classify into 5 workflow types (development, performance, migration, research). Supports GitHub/Jira integration, codebase context analysis, and confidence scoring.
+description: Task classification specialist analyzing task descriptions and issue references to classify into 5 workflow types (development, performance, migration, research, product-design). Supports GitHub/Jira integration, codebase context analysis, and confidence scoring.
 model: inherit
 color: purple
 ---
