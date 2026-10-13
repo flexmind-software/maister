@@ -1,0 +1,521 @@
+---
+name: migration
+description: Orchestrates the complete migration workflow from current state analysis through implementation to compatibility verification. Handles technology migrations, platform changes, and architecture pattern transitions with adaptive risk assessment, incremental execution, and rollback planning. Use when migrating technologies, platforms, or architecture patterns.
+---
+
+# Maister Codex execution adapter
+
+Read this adapter before executing any generated Maister entry point. It defines
+the platform operations used in the instructions below; they are not invented
+native tools. Never call an unavailable Claude tool by its old name.
+
+## Resource resolution
+
+Resolve the package root from the absolute path of the loaded SKILL.md: public
+and internal skills are under `<root>/skills/<name>/SKILL.md`. Hook commands use
+`${PLUGIN_ROOT}`; do not assume that variable is exported to ordinary shell tools.
+For shell commands, replace `${MAISTER_PLUGIN_ROOT}` with this resolved absolute
+root or explicitly set it in the command. Resolve skill-relative references
+against the skill directory, never against the user's working directory.
+
+## Load Maister skill
+
+Read the complete `<root>/skills/<name>/SKILL.md`, execute its instructions in
+the parent context, and return to the caller when done. Public names use
+`maister:<name>`; remove the `maister:` namespace to resolve the directory.
+Directory names remain the source names. Do not spawn a subagent for a skill
+that itself delegates. Reading and executing the instructions is Codex's skill
+loading mechanism, not permission to bypass the workflow.
+
+## Dispatch Maister agent
+
+Use the runtime's subagent spawning tool. For each requested `subagent_type`,
+load `<root>/agents/<role>.md` (remove `maister:` or the optional custom-agent
+prefix `maister-` from the role name) and pass its
+full instructions plus the complete caller context as the child prompt. Use a
+native `default` child for source roles; these definitions are not automatically
+registered plugin agents. For the source Explore role, use native `explorer`
+with the selected prompt templates and the explicit no-write constraint.
+The generated `agents/*.toml` are optional custom-agent configurations, not a
+prerequisite for dispatch. Do not claim a custom role is registered unless it is.
+
+For docs-operator, preload `<root>/skills/docs-manager/SKILL.md` into its prompt.
+Preserve isolated agent contexts. Spawn every ready wave member before waiting
+for any; wait for all members, process all outcomes, then compute the next wave.
+Use runtime tool schemas for argument names. Translated `subagent_type`, `prompt`
+and `description` examples describe the dispatch contract, not literal Codex
+function signatures. If delegation is unavailable, stop and report the missing
+capability rather than implement delegated work inline.
+
+## Maister user decision
+
+Use the runtime's structured user-input tool when available. Otherwise present
+the same question(s), options and context as text and end the turn. Continue
+only after an explicit user response. Multiple questions stay distinct, and
+multi-select decisions retain their meaning. Permission approvals are not
+workflow approvals. Before pausing, persist current state and pending decision
+context without completing the gated phase. Reload that state on continuation.
+Non-interactive execution without a human response remains blocked; never
+infer a choice, silently skip a gate or mark work completed before approval.
+
+## Persistent task operations
+
+The parent alone runs the following adapter through the shell tool:
+
+```bash
+python3 "<root>/runtime/tasks.py" --task-path "<task-path>" create --json '{"subject":"Analysis","description":"Analyze the codebase","activeForm":"Analyzing"}'
+python3 "<root>/runtime/tasks.py" --task-path "<task-path>" update --json '{"taskId":"2","addBlockedBy":["1"]}'
+python3 "<root>/runtime/tasks.py" --task-path "<task-path>" list
+python3 "<root>/runtime/tasks.py" --task-path "<task-path>" get --json '{"taskId":"1"}'
+```
+
+Maister task create/update/list/get correspond to these operations. Preserve
+subject, description, activeForm, owner, metadata, IDs and dependencies. Record
+returned IDs in `orchestrator-state.yml`. `codex-tasks.json` is persistent task
+tracking, not a replacement for workflow state or implementation checkboxes.
+Updates reject unknown dependencies, cycles and premature starts/completion.
+On resume, reuse existing IDs; do not create duplicate task lists. Restore
+completed tasks in dependency order. Only the parent writes the registry, even
+when workers execute concurrently. Adapter errors must be reported, not ignored.
+Quick workflows without a task directory do not need a registry.
+
+## Maister planning-only mode / Maister plan approval
+
+For quick-plan, perform read-only exploration and design: no application edits
+or implementation before approval. Write the plan artifact as required, with
+applicable standards and the compliance checklist. Present the plan and stop
+for explicit approval. After approval, implement and verify the checklist.
+Do not try to call EnterPlanMode/ExitPlanMode or change the user's sandbox.
+
+## File, shell and web operations
+
+Source Read/Write/Edit/Glob/Grep/Bash labels describe operations: use actual
+runtime file/shell tools. For WebFetch/WebSearch use available web/MCP tools.
+Keep standards discovery, no-write roles, test evidence and report contracts.
+If a required integration is missing, report and resolve it explicitly.
+
+## Safety and lifecycle
+
+Review and trust plugin hooks before execution. A reminder is not proof that a
+hook ran; verify runtime loading. The guard conservatively blocks destructive
+commands for every agent because PreToolUse does not reliably identify roles.
+Human-confirmed destructive recovery must be performed by the human outside
+automated execution. The guard is lexical defense-in-depth, not a sandbox or
+complete protection against arbitrary shell code. Keep runtime sandboxing.
+
+---
+
+# Migration Orchestrator
+
+Systematic migration workflow from current state analysis to verified migration with rollback capabilities.
+
+## Initialization
+
+**BEFORE executing any phase, you MUST complete these steps:**
+
+### Step 0: Session-reminder conflict resolution (decide ONCE)
+
+Before doing anything else, settle this policy now and do not re-litigate it at any gate:
+
+**`→ MANDATORY GATE` markers fire regardless of session-reminders, permission mode, or prior approval patterns.** Auto / acceptEdits / bypassPermissions modes, reminders saying "work without stopping" / "continue without asking" / "minimize clarifying questions," and compaction summaries showing the user approving every prior gate do NOT exempt you from invoking `Maister user decision` at a gate. They apply only to your discretionary clarifications.
+
+If you find yourself reasoning "the user has been approving everything, so I can skip this gate" or "auto-mode is on, so I should minimize questions" — that reasoning IS the failure mode. STOP and fire the gate.
+
+Full framework rule: `../orchestrator-framework/references/orchestrator-patterns.md` § 2 and § 2.1.
+
+### Step 1: Load Framework Patterns
+
+**Read the framework reference file NOW using the Read tool:**
+
+1. `../orchestrator-framework/references/orchestrator-patterns.md` - Delegation rules, interactive mode, state schema, initialization, context passing, issue resolution
+
+### Step 2: Initialize Workflow
+
+1. **Capture the clock**: run `date -u +"%Y-%m-%dT%H:%M:%SZ"` via Bash NOW — you do NOT know the time from context. Every timestamp written this turn (`created`, `updated`, `generated`, `phases[].started`) uses this value. Date-only or `T00:00:00Z` values are the documented failure mode (orchestrator-patterns.md § 4 Timestamp Rule). Re-run `date` in later turns before writing timestamps.
+2. **Validate the flags**: `--type`, when passed, must be one of `code`, `data`, `architecture`, `general`. On any other value, print those four and STOP — do not create the task directory, do not write state. A technology name belongs in the description, not the flag; Phase 2 classifies when the flag is absent. A valid value is recorded as `migration_context.migration_type`. `--user-docs`, when passed, is recorded as `orchestrator.options.docs_enabled: true`.
+3. **Create Task Items**: Use `Maister task create` for all phases (see Phase Configuration), then set dependencies with `Maister task update addBlockedBy`
+4. **Create Task Directory**: `.maister/tasks/migrations/YYYY-MM-DD-task-name/`
+5. **Initialize State**: Create `orchestrator-state.yml` with migration context
+6. **Set up Operator Dashboard** (orchestrator-patterns.md § 8) — first read `.maister/config.yml` and set `orchestrator.options.html_output` (default true if the file/key is absent). **When `html_output` is false, SKIP this entire step** — no `dashboard.html`, no `dashboard-data.js`, no browser auto-open — and proceed. Otherwise: copy `../orchestrator-framework/assets/dashboard.html` to the task root as `dashboard.html`, write the initial `dashboard-data.js` (all phases pending, `task.type: "migration"`), then **auto-open it in the user's browser** (`open` / `xdg-open` / `start` per platform, passing the plain absolute filesystem path — NEVER a hand-built `file://` URL; on failure just print the path — never block). On resume: re-copy `dashboard.html` only if missing; regenerate `dashboard-data.js` from state; then auto-open it in the browser again (same opener as a new task — the OS focuses an already-open tab rather than duplicating).
+7. **Discover project documentation**: Read `.maister/docs/INDEX.md` (if exists), extract ALL file paths from the "Project Documentation" section — includes predefined docs AND any user-added project docs. Store as `project_context.project_doc_paths` in state.
+
+**Output**:
+```
+🚀 Migration Orchestrator Started
+
+Task: [migration description]
+Directory: [task-path]
+Dashboard: open [task-path]/dashboard.html in a browser to monitor progress
+
+Starting Phase 1: Analyze current state...
+```
+
+---
+
+## Operator Visibility (applies to every phase)
+
+> **Config gate**: these rules assume `options.html_output` is true (read from `.maister/config.yml` at init, default true). When **false**: skip the Dashboard-upkeep rule entirely (no dashboard files, no browser open, no rewrites) and the HTML-companions rule (do NOT pass `html_style_guide_path`; subagents write md only). The Artifact Summary Contract (§ 7 TL;DR blocks) and `phase_summaries` in state stay active either way.
+
+Cross-cutting rules from `orchestrator-patterns.md` (same as the development orchestrator):
+
+1. **Artifact Summary Contract (§ 7)**: every artifact-writing subagent prompt MUST include the contract instruction (artifacts open with TL;DR / Key Decisions / Open Questions / Risks (the writer heading is `## Open Questions / Risks`)). At context extraction, lift `decisions`, `risks`, and `artifacts` into `phase_summaries.[phase]` — verbatim, never re-summarized.
+2. **Dashboard upkeep (§ 8)**: rewrite `dashboard-data.js` at every phase START (mark `in_progress` before delegating), **BEFORE firing every exit gate** (register the finished phase's artifacts/summary/decisions/risks — the operator reviews them on the dashboard while answering; status stays `in_progress` until the gate passes), after every phase completion (including skipped phases, with reason), every gate decision, every verification cycle, and at finalization. Every rewrite starts with `date -u` (one call per turn). It is a terse projection of state — never duplicate artifact content into it.
+3. **HTML companions (§ 9)**: pass `html_style_guide_path` (absolute path to `../orchestrator-framework/references/html-report-style.md`) to specification-creator, implementation-planner, and implementation-verifier. Register returned `html_path` values in `phase_summaries.[phase].artifacts[].html` so the dashboard hero cards link HTML first.
+4. **icon_hint values** per phase: 1 `analysis`, 2 `analysis`, 3 `spec`, 4 `plan`, 5 `code`, 6 `verify`, 7 `verify`, 8 `docs`.
+
+---
+
+## When to Use
+
+Use for:
+- Migrating from one framework/library to another (e.g., Vue 2 → Vue 3, Express → Fastify)
+- Changing database platforms (e.g., MySQL → PostgreSQL, MongoDB → DynamoDB)
+- Refactoring architecture patterns (e.g., REST → GraphQL, Monolith → Microservices)
+- Upgrading major versions with breaking changes
+
+**DO NOT use for**: New features, bug fixes, pure refactoring without technology change.
+
+---
+
+## Core Principles
+
+1. **Analyze Before Migrating**: Understand current system before planning target state
+2. **Risk Assessment**: Classify migration type (code/data/architecture) and assess complexity
+3. **Incremental Execution**: Support phased migration with rollback points
+4. **Rollback Planning**: Document undo procedures for each migration phase
+5. **Dual-Run Support**: Enable running old and new systems in parallel during transition
+
+---
+
+## Migration Types
+
+| Type | Keywords | Strategy | Risk Focus |
+|------|----------|----------|------------|
+| **Code** | framework, library, upgrade | Incremental or phased | Breaking changes, API differences |
+| **Data** | database, schema, data migration | Dual-run (zero downtime) | Data integrity, checksums |
+| **Architecture** | REST→GraphQL, monolith→microservices | Dual-run or phased | Compatibility, rollback |
+
+---
+
+## Phase Configuration
+
+| Phase | content | activeForm | Agent/Skill |
+|-------|---------|------------|-------------|
+| 1 | "Analyze current state" | "Analyzing current state" | codebase-analyzer |
+| 2 | "Plan target state and gaps" | "Planning target state and gaps" | gap-analyzer |
+| 3 | "Gather requirements & create migration strategy" | "Gathering requirements & creating migration strategy" | Direct + specification-creator (subagent) |
+| 4 | "Plan implementation" | "Planning implementation" | implementation-planner (subagent) |
+| 5 | "Execute migration" | "Executing migration" | implementation-plan-executor |
+| 6 | "Verify and test compatibility" | "Verifying and testing compatibility" | implementation-verifier |
+| 7 | "Resolve verification issues" | "Resolving verification issues" | Direct (conditional) |
+| 8 | "Generate documentation" | "Generating documentation" | user-docs-generator (optional) |
+
+---
+
+## Workflow Phases
+
+### Phase 1: Current State Analysis & Clarifications
+
+**Purpose**: Comprehensive analysis of current system before migration, followed by scope/requirements clarification
+**Execute**:
+1. Load Maister skill - `maister:codebase-analyzer`
+2. Update state with analysis results
+3. Direct - use Maister user decision for max 5 critical clarifying questions about migration scope, target system, and constraints
+4. Save clarifications to `analysis/clarifications.md`
+
+**Output**: `analysis/current-state-analysis.md`, `analysis/clarifications.md`
+**State**: Update `migration_context.current_system`, `migration_context.clarifications_resolved`, `migration_context.phase_summaries.current_state_analysis`
+
+→ **AUTO-CONTINUE** — Do NOT end turn, do NOT prompt user. Proceed immediately to Phase 2.
+
+---
+
+### Phase 2: Target State Planning & Gap Analysis
+
+**Purpose**: Define target system and identify migration gaps
+**Execute**: Dispatch Maister agent - `maister:gap-analyzer` subagent
+**Output**: `analysis/target-state-plan.md`
+**State**: Update `migration_context.migration_type`, `target_system`, `migration_strategy`, `risk_level`, `breaking_changes`, `migration_context.phase_summaries.gap_analysis`
+
+**Gap Analyzer Tasks**:
+1. Define target system from migration description
+2. Identify gaps (features to migrate, APIs to adapt, data to transform)
+3. Classify migration type (code/data/architecture/general), keeping a type supplied by `--type`
+4. Recommend migration strategy (incremental/big-bang/dual-run/phased)
+5. External research via WebSearch for version upgrades
+
+→ **MANDATORY GATE** — fires regardless of permission mode, session-reminders, or prior approval patterns. Invoke `Maister user decision` now. Proceeding without a user response is a protocol violation (orchestrator-patterns.md § 2 / § 2.1).
+
+Maister user decision - Display executive summary before asking. Extract from gap analysis: current system overview, target system, migration type classified, number of gaps identified, recommended strategy, risk level. Format as brief overview then "Continue to migration strategy?"
+
+---
+
+### Phase 3: Migration Requirements & Strategy Specification
+
+> **Phase entry self-check**: Before executing this phase, locate the `Maister user decision` tool call from Phase 2 in this conversation. If you cannot point to its call ID, STOP and fire that gate now. State updates (`completed_phases`, `Maister task update`) without a corresponding `Maister user decision` call are protocol violations — never paper over a missed gate by updating state.
+
+**Purpose**: Gather migration requirements, then create detailed migration specification with rollback procedures
+**Execute**:
+
+**Part A — Migration Requirements Gathering (inline)**:
+1. Direct - use Maister user decision for migration-specific requirements (3-5 questions):
+   - Migration scope and boundaries (what's in/out of migration)
+   - Rollback expectations and downtime tolerance
+   - Data migration specifics (if data migration type)
+   - Dual-run requirements (if applicable)
+   - Existing code/config to preserve
+   - Frame as confirmable assumptions: "I assume X, is that correct?"
+2. Save gathered requirements to `analysis/requirements.md`
+
+**Part B — Specification Creation (subagent)**:
+3. Dispatch Maister agent - `maister:specification-creator` subagent
+
+**Context to pass to subagent**: task_path, task_type (migration), task_description, requirements_path (analysis/requirements.md), project_context_paths (INDEX.md + project_doc_paths from state — all discovered project docs), migration_type, current_system, target_system, risk_level, breaking_changes, phase_summaries (current_state_analysis, gap_analysis), html_style_guide_path (for the spec.html companion)
+
+**Output**: `analysis/requirements.md`, `implementation/spec.md`, `analysis/rollback-plan.md`, optionally `analysis/dual-run-plan.md`
+**State**: Update `rollback_plan_created`, `dual_run_configured`, `migration_context.phase_summaries.specification`
+
+→ **MANDATORY GATE** — fires regardless of permission mode, session-reminders, or prior approval patterns. Invoke `Maister user decision` now. Proceeding without a user response is a protocol violation (orchestrator-patterns.md § 2 / § 2.1).
+
+Maister user decision - Display executive summary before asking. Read `implementation/spec.md` and extract: migration strategy chosen, scope boundaries, rollback approach, breaking changes identified, key constraints. Format as brief overview then "Continue to implementation planning?"
+
+---
+
+### Phase 4: Implementation Planning
+
+> **Phase entry self-check**: Before executing this phase, locate the `Maister user decision` tool call from Phase 3 in this conversation. If you cannot point to its call ID, STOP and fire that gate now. State updates (`completed_phases`, `Maister task update`) without a corresponding `Maister user decision` call are protocol violations — never paper over a missed gate by updating state.
+
+**Purpose**: Break migration into task groups with rollback steps
+**Execute**: Dispatch Maister agent - `maister:implementation-planner` subagent
+**Output**: `implementation/implementation-plan.md` with rollback procedures
+**State**: Update task groups and dependencies
+
+**Context to pass to subagent**: task_path, task_type (migration), migration_type, task_description, phase_summaries (current_state_analysis, gap_analysis, specification), html_style_guide_path (for the implementation-plan.html companion)
+
+→ **MANDATORY GATE** — fires regardless of permission mode, session-reminders, or prior approval patterns. Invoke `Maister user decision` now. Proceeding without a user response is a protocol violation (orchestrator-patterns.md § 2 / § 2.1).
+
+Maister user decision - Display executive summary before asking. Read `implementation/implementation-plan.md` and extract: number of task groups, total steps, rollback steps included, key dependencies, execution sequence. Format as brief overview then "Continue to execute migration?"
+
+---
+
+### Phase 5: Migration Execution
+
+> **Phase entry self-check**: Before executing this phase, locate the `Maister user decision` tool call from Phase 4 in this conversation. If you cannot point to its call ID, STOP and fire that gate now. State updates (`completed_phases`, `Maister task update`) without a corresponding `Maister user decision` call are protocol violations — never paper over a missed gate by updating state.
+
+**Purpose**: Execute migration steps with incremental verification
+
+**ANTI-PATTERN — DO NOT DO THIS:**
+- ❌ "Let me implement this directly..." — STOP. Delegate to implementation-plan-executor.
+- ❌ "This migration is simple enough to code inline..." — STOP. Simplicity is NOT a reason to skip delegation.
+
+**INVOKE NOW** — Load Maister skill call:
+
+**Execute**: Load Maister skill - `maister:implementation-plan-executor`
+**Output**: Implemented migration changes, `implementation/work-log.md`
+**State**: Update implementation progress, extract `migration_context.phase_summaries.implementation`
+
+📋 **Standards Reminder**: Review `.maister/docs/INDEX.md` before implementing.
+
+**SELF-CHECK**: Did you just invoke the Load Maister skill with `maister:implementation-plan-executor`? Or did you start writing migration code yourself? If the latter, STOP immediately and invoke the Load Maister skill instead.
+
+**⚠️ POST-IMPLEMENTATION CONTINUATION** — After the skill completes and returns control:
+1. **HTML plan reconciliation** (backstop for syncs missed during waves): if `implementation/implementation-plan.html` exists, for every group whose md checkboxes are all `[x]`, run the executor's idempotent marker-flip command (`sed` flipping `data-step="N\.[0-9]*" class="step todo"` and `data-group="N" class="group todo"` to `done`). VERIFY: when all md steps are checked, `grep -c 'class="step todo"' implementation/implementation-plan.html` must return 0.
+2. Read `orchestrator-state.yml` to confirm you are the orchestrator
+3. Update state: add Phase 5 to `completed_phases`
+4. Proceed to Phase 6
+
+→ **MANDATORY GATE** — fires regardless of permission mode, session-reminders, or prior approval patterns. Invoke `Maister user decision` now. Proceeding without a user response is a protocol violation (orchestrator-patterns.md § 2 / § 2.1).
+
+Maister user decision - Display executive summary before asking. Extract from `phase_summaries.implementation` and `implementation/work-log.md`: migration steps completed, files changed, test results, rollback readiness status. Format as brief overview then "Continue to verification?"
+
+---
+
+### Phase 6: Verification + Compatibility Testing
+
+> **Phase entry self-check**: Before executing this phase, locate the `Maister user decision` tool call from Phase 5 in this conversation. If you cannot point to its call ID, STOP and fire that gate now. State updates (`completed_phases`, `Maister task update`) without a corresponding `Maister user decision` call are protocol violations — never paper over a missed gate by updating state.
+
+**Purpose**: Verify migration success with compatibility and rollback testing
+**Execute**: Load Maister skill - `maister:implementation-verifier`
+**Output**: `verification/implementation-verification.md`, `verification/compatibility-test-results.md`
+**State**: Update verification results
+
+**Migration-Specific Checks**:
+- Verify old system still works (if dual-run)
+- Test rollback procedures (non-destructive)
+- Validate data integrity (for data migrations)
+- Check performance benchmarks (before/after)
+
+**⚠️ POST-VERIFICATION CONTINUATION** — After the skill completes and returns control:
+1. Read `orchestrator-state.yml` to confirm you are the orchestrator
+2. Update state: add Phase 6 to `completed_phases`
+3. Evaluate verdict: if PASS → Phase 8, if fixable issues → Phase 7, otherwise stop workflow
+
+→ **MANDATORY GATE** — fires regardless of permission mode, session-reminders, or prior approval patterns. Invoke `Maister user decision` now. Proceeding without a user response is a protocol violation (orchestrator-patterns.md § 2 / § 2.1).
+
+Maister user decision - Display executive summary before asking. Extract from verification results: overall verdict, issue counts by severity, compatibility test results, data integrity status, rollback test results. Format as detailed overview then "Continue to Phase [7 or 8]?"
+
+---
+
+### Phase 7: Migration Issue Resolution (Conditional)
+
+> **Phase entry self-check**: Before executing this phase, locate the `Maister user decision` tool call from Phase 6 in this conversation. If you cannot point to its call ID, STOP and fire that gate now. State updates (`completed_phases`, `Maister task update`) without a corresponding `Maister user decision` call are protocol violations — never paper over a missed gate by updating state.
+
+**Purpose**: Fix verification issues through direct editing and re-verification
+**Execute**: Direct - apply fixes, re-verify
+**Output**: Updated code, `verification_context.fixes_applied`
+**State**: Update `reverify_count`, `decisions_made`
+
+**Skip if**: verdict = PASS
+
+**Process**:
+1. Display detailed issue breakdown grouped by category and severity, listing location, description, and fixability
+2. Present all critical + warning issues as a numbered list
+3. Maister user decision — "Which issues should I fix?" with options: "Fix all fixable issues" / "Let me choose specific issues" / "Skip fixes, proceed as-is"
+4. Fix selected issues
+5. Maister user decision — "Re-run verification to check fixes?" with options: "Yes, re-run verification" / "No, proceed to next phase"
+6. If re-run → re-invoke `maister:implementation-verifier` → return to Step 1
+7. Max 3 iterations
+
+**Data Safety Critical**: HALT on any data integrity issue - never auto-fix data problems. Always present data issues to user with rollback option.
+
+**Exit Conditions**:
+- ✅ No critical issues remain → Proceed to Phase 8
+- ⚠️ Max iterations (3) reached → Ask user: proceed with warnings or rollback
+- ❌ Data integrity issues → HALT immediately, recommend rollback
+
+→ **MANDATORY GATE** — fires regardless of permission mode, session-reminders, or prior approval patterns. Invoke `Maister user decision` now. Proceeding without a user response is a protocol violation (orchestrator-patterns.md § 2 / § 2.1).
+
+Maister user decision - Display executive summary: total issues found, issues fixed, issues remaining by severity. Then "Continue to documentation?"
+
+---
+
+### Phase 8: Documentation (Optional)
+
+> **Phase entry self-check**: Before executing this phase, locate the `Maister user decision` tool call from the preceding phase in this conversation. If you cannot point to its call ID, STOP and fire that gate now. State updates (`completed_phases`, `Maister task update`) without a corresponding `Maister user decision` call are protocol violations — never paper over a missed gate by updating state.
+
+**Purpose**: Create migration guide for end users
+**Execute**: Dispatch Maister agent - `maister:user-docs-generator` subagent
+**Output**: `documentation/migration-guide.md`
+**State**: Set documentation complete
+
+**Skip if**: `options.docs_enabled = false`
+
+**Documentation Covers**:
+- Migration overview and goals
+- Prerequisites and preparation steps
+- Step-by-step migration procedure
+- Rollback procedures
+- Troubleshooting common issues
+
+**Before closing the workflow** (whether or not this phase ran — when it is skipped, this step follows the Phase 7 gate): **Reconcile artifacts against disk** — compare every `artifacts[]` entry in state with what actually exists and name every missing path in the summary (`orchestrator-patterns.md` § 10).
+
+→ End of workflow
+
+---
+
+## Domain Context (State Extensions)
+
+Migration-specific fields in `orchestrator-state.yml`:
+
+```yaml
+migration_context:
+  migration_type: "code" | "data" | "architecture" | "general"
+  current_system:
+    description: null
+    technologies: []
+  target_system:
+    description: null
+    technologies: []
+  migration_strategy:
+    approach: "incremental" | "big-bang" | "dual-run" | "phased"
+    phases: []
+  risk_level: null
+  breaking_changes: []
+  rollback_plan_created: false
+  dual_run_configured: false
+  clarifications_resolved: false
+  phase_summaries:
+    # Every entry also carries the shared base shape (orchestrator-patterns.md § 4):
+    #   decisions: []   risks: []   artifacts: [{path, label, html}]
+    current_state_analysis: {summary: null}
+    gap_analysis: {summary: null}
+    specification: {summary: null}
+    implementation: {summary: null}
+
+external_research:
+  performed: false
+  category: null
+  breaking_changes: []
+  migration_guide_url: null
+
+verification_context:
+  last_status: null
+  issues_found: null
+  fixes_applied: []
+  decisions_made: []
+  reverify_count: 0
+
+orchestrator:
+  options:
+    html_output: true  # Seeded from .maister/config.yml at init (default true). Gates dashboard + HTML companions.
+    docs_enabled: false  # true when `--user-docs` was passed
+```
+
+---
+
+## Task Structure
+
+```
+.maister/tasks/migrations/YYYY-MM-DD-migration-name/
+├── orchestrator-state.yml
+├── dashboard.html                    # Operator dashboard (copied plugin asset — never model-generated)
+├── dashboard-data.js                 # Dashboard data projection (rewritten per phase/gate)
+├── analysis/
+│   ├── current-state-analysis.md     # Phase 1
+│   ├── target-state-plan.md          # Phase 2
+│   ├── requirements.md               # Phase 3
+│   ├── rollback-plan.md              # Phase 3
+│   └── dual-run-plan.md              # Phase 3 (if dual-run)
+├── implementation/
+│   ├── spec.md                       # Phase 3
+│   ├── spec.html                     # Phase 3 (HTML companion)
+│   ├── implementation-plan.md        # Phase 4
+│   ├── implementation-plan.html      # Phase 4 (HTML companion)
+│   └── work-log.md                   # Phase 5
+├── verification/
+│   ├── implementation-verification.md    # Phase 6
+│   ├── implementation-verification.html  # Phase 6 (HTML companion)
+│   └── compatibility-test-results.md     # Phase 6
+└── documentation/
+    └── migration-guide.md            # Phase 8 (optional)
+```
+
+---
+
+## Auto-Recovery
+
+| Phase | Max Attempts | Strategy |
+|-------|--------------|----------|
+| 1 | 2 | Expand search patterns, prompt user for file paths |
+| 2 | 2 | Re-prompt for target details |
+| 3 | 2 | Re-gather requirements, re-invoke spec-creator subagent, regenerate rollback plan |
+| 4 | 2 | Regenerate with migration constraints |
+| 5 | 5 | Fix syntax errors, prompt user on repeated failure |
+| 6 | 3 | Fix-then-reverify. **HALT on data integrity issues** |
+| 8 | 1 | Generate text-only without screenshots |
+
+---
+
+## Command Integration
+
+Invoked via:
+- `$maister:migration [description] [--type=code|data|architecture|general] [--user-docs] [--sequential]` (new)
+- `$maister:migration [task-path] [--from=PHASE] [--sequential]` (resume)
+
+Flags:
+- `--type=code|data|architecture|general`: Migration category (affects risk focus). One of those four values; any other value stops at initialization before a task directory exists. Absent, Phase 2 classifies the migration. Name technologies in the description — they belong in `current_system` / `target_system`, not in this flag.
+- `--user-docs`: Generate the Phase 8 migration guide. Persisted as `orchestrator.options.docs_enabled: true` in `orchestrator-state.yml`. Defaults to off.
+- `--from=PHASE`: Resume from specific phase
+- `--sequential`: Disable parallel wave dispatch in `implementation-plan-executor`; run one task group at a time. Persisted as `orchestrator.options.sequential: true` in `orchestrator-state.yml`. Defaults to off (parallel waves).
+
+Task directory: `.maister/tasks/migrations/YYYY-MM-DD-task-name/`

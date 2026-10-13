@@ -1,4 +1,10 @@
-.PHONY: build validate clean watch
+.PHONY: build validate clean watch build-codex test-codex
+
+build-codex:
+	PYTHONDONTWRITEBYTECODE=1 python3 platforms/codex/build.py
+
+test-codex:
+	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s platforms/codex/tests -v
 
 build:
 	bash platforms/copilot-cli/build.sh

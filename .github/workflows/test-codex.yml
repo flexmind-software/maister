@@ -1,0 +1,40 @@
+name: Test Codex Variant
+
+on:
+  push:
+    branches: [master, v2]
+    paths:
+      - 'plugins/maister/**'
+      - 'plugins/maister-codex/**'
+      - 'platforms/**'
+      - '.agents/plugins/marketplace.json'
+      - '.github/workflows/test-codex.yml'
+      - 'Makefile'
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - name: Test Codex adapters and generation
+        run: make test-codex
+      - name: Verify generated package is current
+        run: |
+          make build-codex
+          git diff --exit-code -- plugins/maister-codex/
+          test -z "$(git ls-files --others --exclude-standard plugins/maister-codex/)"
+          git diff --exit-code -- plugins/maister-copilot/
+      - name: Rebuild and validate Copilot regression
+        run: |
+          make build
+          make validate

@@ -12,6 +12,18 @@
         "authentication": "ON_INSTALL"
       },
       "category": "development"
+    },
+    {
+      "name": "maister",
+      "source": {
+        "source": "local",
+        "path": "./plugins/maister-codex"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "development"
     }
   ]
 }

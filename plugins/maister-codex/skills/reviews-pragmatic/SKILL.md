@@ -1,0 +1,196 @@
+---
+name: reviews-pragmatic
+description: Run pragmatic code review to detect over-engineering and ensure code matches project scale
+---
+
+# Maister Codex execution adapter
+
+Read this adapter before executing any generated Maister entry point. It defines
+the platform operations used in the instructions below; they are not invented
+native tools. Never call an unavailable Claude tool by its old name.
+
+## Resource resolution
+
+Resolve the package root from the absolute path of the loaded SKILL.md: public
+and internal skills are under `<root>/skills/<name>/SKILL.md`. Hook commands use
+`${PLUGIN_ROOT}`; do not assume that variable is exported to ordinary shell tools.
+For shell commands, replace `${MAISTER_PLUGIN_ROOT}` with this resolved absolute
+root or explicitly set it in the command. Resolve skill-relative references
+against the skill directory, never against the user's working directory.
+
+## Load Maister skill
+
+Read the complete `<root>/skills/<name>/SKILL.md`, execute its instructions in
+the parent context, and return to the caller when done. Public names use
+`maister:<name>`; remove the `maister:` namespace to resolve the directory.
+Directory names remain the source names. Do not spawn a subagent for a skill
+that itself delegates. Reading and executing the instructions is Codex's skill
+loading mechanism, not permission to bypass the workflow.
+
+## Dispatch Maister agent
+
+Use the runtime's subagent spawning tool. For each requested `subagent_type`,
+load `<root>/agents/<role>.md` (remove `maister:` or the optional custom-agent
+prefix `maister-` from the role name) and pass its
+full instructions plus the complete caller context as the child prompt. Use a
+native `default` child for source roles; these definitions are not automatically
+registered plugin agents. For the source Explore role, use native `explorer`
+with the selected prompt templates and the explicit no-write constraint.
+The generated `agents/*.toml` are optional custom-agent configurations, not a
+prerequisite for dispatch. Do not claim a custom role is registered unless it is.
+
+For docs-operator, preload `<root>/skills/docs-manager/SKILL.md` into its prompt.
+Preserve isolated agent contexts. Spawn every ready wave member before waiting
+for any; wait for all members, process all outcomes, then compute the next wave.
+Use runtime tool schemas for argument names. Translated `subagent_type`, `prompt`
+and `description` examples describe the dispatch contract, not literal Codex
+function signatures. If delegation is unavailable, stop and report the missing
+capability rather than implement delegated work inline.
+
+## Maister user decision
+
+Use the runtime's structured user-input tool when available. Otherwise present
+the same question(s), options and context as text and end the turn. Continue
+only after an explicit user response. Multiple questions stay distinct, and
+multi-select decisions retain their meaning. Permission approvals are not
+workflow approvals. Before pausing, persist current state and pending decision
+context without completing the gated phase. Reload that state on continuation.
+Non-interactive execution without a human response remains blocked; never
+infer a choice, silently skip a gate or mark work completed before approval.
+
+## Persistent task operations
+
+The parent alone runs the following adapter through the shell tool:
+
+```bash
+python3 "<root>/runtime/tasks.py" --task-path "<task-path>" create --json '{"subject":"Analysis","description":"Analyze the codebase","activeForm":"Analyzing"}'
+python3 "<root>/runtime/tasks.py" --task-path "<task-path>" update --json '{"taskId":"2","addBlockedBy":["1"]}'
+python3 "<root>/runtime/tasks.py" --task-path "<task-path>" list
+python3 "<root>/runtime/tasks.py" --task-path "<task-path>" get --json '{"taskId":"1"}'
+```
+
+Maister task create/update/list/get correspond to these operations. Preserve
+subject, description, activeForm, owner, metadata, IDs and dependencies. Record
+returned IDs in `orchestrator-state.yml`. `codex-tasks.json` is persistent task
+tracking, not a replacement for workflow state or implementation checkboxes.
+Updates reject unknown dependencies, cycles and premature starts/completion.
+On resume, reuse existing IDs; do not create duplicate task lists. Restore
+completed tasks in dependency order. Only the parent writes the registry, even
+when workers execute concurrently. Adapter errors must be reported, not ignored.
+Quick workflows without a task directory do not need a registry.
+
+## Maister planning-only mode / Maister plan approval
+
+For quick-plan, perform read-only exploration and design: no application edits
+or implementation before approval. Write the plan artifact as required, with
+applicable standards and the compliance checklist. Present the plan and stop
+for explicit approval. After approval, implement and verify the checklist.
+Do not try to call EnterPlanMode/ExitPlanMode or change the user's sandbox.
+
+## File, shell and web operations
+
+Source Read/Write/Edit/Glob/Grep/Bash labels describe operations: use actual
+runtime file/shell tools. For WebFetch/WebSearch use available web/MCP tools.
+Keep standards discovery, no-write roles, test evidence and report contracts.
+If a required integration is missing, report and resolve it explicitly.
+
+## Safety and lifecycle
+
+Review and trust plugin hooks before execution. A reminder is not proof that a
+hook ran; verify runtime loading. The guard conservatively blocks destructive
+commands for every agent because PreToolUse does not reliably identify roles.
+Human-confirmed destructive recovery must be performed by the human outside
+automated execution. The guard is lexical defense-in-depth, not a sandbox or
+complete protection against arbitrary shell code. Keep runtime sandboxing.
+
+---
+
+**ACTION REQUIRED**: This command delegates to a different skill. The `<command-name>` tag refers to THIS command, not the target. Call the Dispatch Maister agent with subagent_type="maister:code-quality-pragmatist" NOW. Pass the path to analyze in the prompt. Do not read files, explore code, or execute workflow steps yourself.
+
+You are running a pragmatic code review using the `code-quality-pragmatist` agent.
+
+## Your Task
+
+You are performing pragmatic analysis to identify over-engineering, unnecessary complexity, and developer experience issues.
+
+## Parse User Request
+
+**Determine the following from the user's request:**
+
+1. **Path to analyze**:
+   - If provided: Use the specified path
+   - If not provided: Use Maister user decision to ask what to analyze (file, directory, or task path)
+
+## Your Instructions
+
+**Invoke the code-quality-pragmatist agent NOW using the Dispatch Maister agent:**
+
+```
+Task Tool:
+- subagent_type: code-quality-pragmatist
+- description: Pragmatic code review
+- prompt: |
+    You are the code-quality-pragmatist agent. Review the code at: [path]
+
+    Your task:
+    1. Assess overall complexity relative to project scale (check .maister/docs/project/ for scale)
+    2. Detect over-engineering patterns (infrastructure overkill, excessive abstraction, enterprise patterns in simple code)
+    3. Assess developer experience (setup complexity, feedback loops, error messages, consistency)
+    4. Verify requirements alignment (if spec.md available, compare implementation to requirements)
+    5. Recommend specific simplifications with before/after examples
+    6. Prioritize top 3 changes with highest impact
+
+    Generate comprehensive pragmatic review report.
+    Save to: verification/pragmatic-review.md
+
+    Focus on: Simple solutions for simple problems. Code should match project needs, not theoretical best practices.
+```
+
+**Wait for the agent to complete before proceeding.**
+
+The code-quality-pragmatist agent will:
+1. Assess complexity relative to project scale (MVP vs Enterprise)
+2. Detect over-engineering (Redis in MVP, excessive layers, premature optimization)
+3. Identify developer experience friction points
+4. Compare implementation to requirements (if spec available)
+5. Recommend concrete simplifications with impact estimates
+6. Provide top 3 priority actions
+
+## Examples
+
+**Example 1**: Review specific feature
+```
+User: $maister:reviews-pragmatic .maister/tasks/development/2025-11-17-user-management/
+```
+
+**Example 2**: Review source directory
+```
+User: $maister:reviews-pragmatic src/features/payments/
+```
+
+**Example 3**: Review specific file
+```
+User: $maister:reviews-pragmatic src/services/cache-service.ts
+```
+
+## What to Expect
+
+The code-quality-pragmatist will provide:
+- Complexity assessment (Low/Medium/High) relative to project scale
+- Over-engineering patterns with severity (Critical/High/Medium/Low)
+- Developer experience issues and friction points
+- Requirements alignment assessment
+- Concrete simplification recommendations with before/after examples
+- Top 3 priority actions with estimated impact
+- Summary statistics (LOC reduction potential, dependencies removable)
+
+## Notes
+
+- This is analysis only - no code will be modified
+- Focus on pragmatism: appropriate complexity for actual needs
+- Identifies unnecessary infrastructure, abstractions, and patterns
+- Severity levels guide prioritization:
+  - **Critical**: Severe over-engineering blocking development
+  - **High**: Significant unnecessary complexity
+  - **Medium**: Moderate complexity issues
+  - **Low**: Minor improvements

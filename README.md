@@ -34,13 +34,10 @@ After installing, restart Claude Code (`/exit` and relaunch) to ensure the plugi
 
 On GitHub Copilot CLI, install the `maister-copilot` variant with `copilot plugin install` — from a registered marketplace (`copilot plugin marketplace add SkillPanel/maister`, then `copilot plugin install maister-copilot@maister-plugins`) or straight from the repository subdirectory (`copilot plugin install SkillPanel/maister:plugins/maister-copilot`). To run a local checkout instead, load it with `copilot --plugin-dir /path/to/maister/plugins/maister-copilot`; add `--add-dir` for the same path when the checkout sits outside your working directory, which grants file access to it. `--add-dir` on its own does not load a plugin. Then export `MAISTER_PLUGIN_ROOT` as the variant's [install notes](platforms/copilot-cli/README.md) describe, so HTML mockups can start their preview server.
 
-On Codex, use the generated portable plugin root at `plugins/maister-copilot`.
-Its root `plugin.json` declares the shared skills and MCP configuration; Claude
-Code and Copilot continue to use their platform-specific manifests and command
-adapters. Codex consumes the same workflows as skills (for example
-`$development`, `$research`, and `$product-design`) rather than Claude slash
-commands. If you install individual skills instead of the plugin, use the
-`plugins/maister/skills/` directory as the source.
+On Codex CLI, use the dedicated generated variant at `plugins/maister-codex`.
+It packages Codex workflow adapters, task tracking, hooks and native skill entry
+points such as `$maister:development`. See its [installation and acceptance
+notes](platforms/codex/README.md). Full workflow parity remains under validation.
 
 ### Initial project setup
 

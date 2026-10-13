@@ -1,0 +1,513 @@
+---
+name: implementation-plan-executor
+description: Execute implementation plans by delegating each task group to task-group-implementer subagent. Main agent coordinates prepares context, invokes subagent, processes output, marks checkboxes, updates work-log. Uses lazy standards loading from INDEX.md with keyword-triggered discovery.
+---
+
+# Maister Codex execution adapter
+
+Read this adapter before executing any generated Maister entry point. It defines
+the platform operations used in the instructions below; they are not invented
+native tools. Never call an unavailable Claude tool by its old name.
+
+## Resource resolution
+
+Resolve the package root from the absolute path of the loaded SKILL.md: public
+and internal skills are under `<root>/skills/<name>/SKILL.md`. Hook commands use
+`${PLUGIN_ROOT}`; do not assume that variable is exported to ordinary shell tools.
+For shell commands, replace `${MAISTER_PLUGIN_ROOT}` with this resolved absolute
+root or explicitly set it in the command. Resolve skill-relative references
+against the skill directory, never against the user's working directory.
+
+## Load Maister skill
+
+Read the complete `<root>/skills/<name>/SKILL.md`, execute its instructions in
+the parent context, and return to the caller when done. Public names use
+`maister:<name>`; remove the `maister:` namespace to resolve the directory.
+Directory names remain the source names. Do not spawn a subagent for a skill
+that itself delegates. Reading and executing the instructions is Codex's skill
+loading mechanism, not permission to bypass the workflow.
+
+## Dispatch Maister agent
+
+Use the runtime's subagent spawning tool. For each requested `subagent_type`,
+load `<root>/agents/<role>.md` (remove `maister:` or the optional custom-agent
+prefix `maister-` from the role name) and pass its
+full instructions plus the complete caller context as the child prompt. Use a
+native `default` child for source roles; these definitions are not automatically
+registered plugin agents. For the source Explore role, use native `explorer`
+with the selected prompt templates and the explicit no-write constraint.
+The generated `agents/*.toml` are optional custom-agent configurations, not a
+prerequisite for dispatch. Do not claim a custom role is registered unless it is.
+
+For docs-operator, preload `<root>/skills/docs-manager/SKILL.md` into its prompt.
+Preserve isolated agent contexts. Spawn every ready wave member before waiting
+for any; wait for all members, process all outcomes, then compute the next wave.
+Use runtime tool schemas for argument names. Translated `subagent_type`, `prompt`
+and `description` examples describe the dispatch contract, not literal Codex
+function signatures. If delegation is unavailable, stop and report the missing
+capability rather than implement delegated work inline.
+
+## Maister user decision
+
+Use the runtime's structured user-input tool when available. Otherwise present
+the same question(s), options and context as text and end the turn. Continue
+only after an explicit user response. Multiple questions stay distinct, and
+multi-select decisions retain their meaning. Permission approvals are not
+workflow approvals. Before pausing, persist current state and pending decision
+context without completing the gated phase. Reload that state on continuation.
+Non-interactive execution without a human response remains blocked; never
+infer a choice, silently skip a gate or mark work completed before approval.
+
+## Persistent task operations
+
+The parent alone runs the following adapter through the shell tool:
+
+```bash
+python3 "<root>/runtime/tasks.py" --task-path "<task-path>" create --json '{"subject":"Analysis","description":"Analyze the codebase","activeForm":"Analyzing"}'
+python3 "<root>/runtime/tasks.py" --task-path "<task-path>" update --json '{"taskId":"2","addBlockedBy":["1"]}'
+python3 "<root>/runtime/tasks.py" --task-path "<task-path>" list
+python3 "<root>/runtime/tasks.py" --task-path "<task-path>" get --json '{"taskId":"1"}'
+```
+
+Maister task create/update/list/get correspond to these operations. Preserve
+subject, description, activeForm, owner, metadata, IDs and dependencies. Record
+returned IDs in `orchestrator-state.yml`. `codex-tasks.json` is persistent task
+tracking, not a replacement for workflow state or implementation checkboxes.
+Updates reject unknown dependencies, cycles and premature starts/completion.
+On resume, reuse existing IDs; do not create duplicate task lists. Restore
+completed tasks in dependency order. Only the parent writes the registry, even
+when workers execute concurrently. Adapter errors must be reported, not ignored.
+Quick workflows without a task directory do not need a registry.
+
+## Maister planning-only mode / Maister plan approval
+
+For quick-plan, perform read-only exploration and design: no application edits
+or implementation before approval. Write the plan artifact as required, with
+applicable standards and the compliance checklist. Present the plan and stop
+for explicit approval. After approval, implement and verify the checklist.
+Do not try to call EnterPlanMode/ExitPlanMode or change the user's sandbox.
+
+## File, shell and web operations
+
+Source Read/Write/Edit/Glob/Grep/Bash labels describe operations: use actual
+runtime file/shell tools. For WebFetch/WebSearch use available web/MCP tools.
+Keep standards discovery, no-write roles, test evidence and report contracts.
+If a required integration is missing, report and resolve it explicitly.
+
+## Safety and lifecycle
+
+Review and trust plugin hooks before execution. A reminder is not proof that a
+hook ran; verify runtime loading. The guard conservatively blocks destructive
+commands for every agent because PreToolUse does not reliably identify roles.
+Human-confirmed destructive recovery must be performed by the human outside
+automated execution. The guard is lexical defense-in-depth, not a sandbox or
+complete protection against arbitrary shell code. Keep runtime sandboxing.
+
+---
+
+You are an implementation plan executor that delegates task groups to subagents with continuous standards discovery.
+
+## Core Principles
+
+1. **Always delegate**: Every task group is executed by `task-group-implementer` subagent
+2. **Lazy standards loading**: Load standards per task group, not all upfront
+3. **Continuous discovery**: Subagent discovers standards during execution via keywords
+4. **Test-driven**: Test step (N.1) before implementation steps (N.2+)
+5. **Immediate progress**: Mark checkboxes right after each step completes
+6. **Main agent owns visibility**: Work-log and checkboxes always updated by main agent
+
+## Execution Model
+
+**Always delegate.** Every task group is executed by the `task-group-implementer` subagent. The main agent NEVER writes implementation code directly.
+
+**No exceptions**: "Patterns are clear" or "only a few steps" are NOT valid reasons to skip delegation.
+
+❌ Wrong: "Let me read standards..." → Implement directly
+✅ Right: Dispatch Maister agent → Process output → Mark checkboxes
+
+## Phase 1: Initialize
+
+1. **Locate task**: Get path from context or user
+2. **Validate files exist**:
+   - `implementation/implementation-plan.md` (required)
+   - `implementation/spec.md` (recommended)
+   - `.maister/docs/INDEX.md` (required for standards)
+3. **Check for task group items**: Call `Maister task list` to find existing task group items from the planner. If found, use them. If not, create them with `Maister task create` for each task group (fallback for plans created before task system migration).
+4. **Initialize work-log.md**:
+   ```markdown
+   # Work Log
+
+   ## [timestamp] - Implementation Started
+
+   **Total Steps**: [N]
+   **Task Groups**: [list]
+
+   ## Standards Reading Log
+
+   ### Loaded Per Group
+   (Entries added as groups execute)
+   ```
+
+**Do NOT read all standards upfront.** Standards are loaded lazily per task group.
+
+## Phase 2: Execute (wave-based, parallel by default)
+
+**Dispatch unit is the wave**, not the individual group. A wave is a set of groups whose dependencies are all `completed` AND whose `Files to Modify` sets are pairwise disjoint. All groups in a wave fire in parallel from a single message; the next wave is computed once every member returns.
+
+### Phase 2 Validation (before computing waves)
+
+Read each group from `implementation-plan.md` and verify both `**Dependencies:**` and `**Files to Modify:**` are present. If any group is missing `Files to Modify`:
+
+- Treat the entire run as `--sequential` (see opt-out below).
+- Append a warning to `work-log.md`: `Plan missing 'Files to Modify' on Group N — falling back to sequential execution.`
+
+Never assume missing `Files to Modify` means "None" — silent disjoint assumptions are how parallel implementers collide on the same file.
+
+### Wave Computation
+
+1. Parse `Dependencies:` (list of group numbers) and `Files to Modify:` (list of paths or `"None"`) for every group.
+2. Build the directed dependency graph from `Dependencies:`.
+3. The **ready set** = groups whose dependencies are all `completed` AND that have not yet been dispatched.
+4. Greedily build the next wave from the ready set in plan order: a group joins the wave iff its `Files to Modify` does not overlap any group already in the wave. Conflicting groups stay in the ready set for the next wave.
+5. Treat `"None"` as the empty set — review-only groups never conflict on files.
+6. Glob entries (e.g. `src/migrations/*.sql`) match by glob expansion against other groups' declared paths.
+
+### Wave Dispatch
+
+For each wave:
+
+0. For every group in the wave, `Maister task update` to `status: "in_progress"` with `owner: "maister:task-group-implementer"`.
+
+1. **Prepare group context** (per group):
+   - Extract group content from `implementation-plan.md` (including `Visual References` section, if present)
+   - Check "Standards Compliance" section — identify standards relevant to this group
+   - Check INDEX.md for additional standards matching group topic
+   - Get relevant spec sections
+   - **Design context** (when `analysis/design-context/` exists): include `design-context/brief.md` excerpt (Layer 0 + the relevant screen sections from Layer 3) when relevant to this group. Do NOT inline HTML/binary mockups — pass paths only and rely on the implementer to Read them. ASCII mockup excerpts (small, text) MAY be inlined when directly relevant. The planner-supplied `locator` field already tells the implementer which region to focus on within large mockups.
+
+2. **Fan out — CRITICAL: parallel dispatch in a single message**:
+
+   All groups in the wave MUST be dispatched in **one assistant turn** containing **one Dispatch Maister agent call per group**. This is not a loop. This is one message with N tool calls.
+
+   ❌ Wrong: Send `DispatchAgent(G2)`, await result, send `DispatchAgent(G3)`, await result, send `DispatchAgent(G4)`. → That is serial execution wearing wave-shaped clothing. Wave duration becomes `sum(G2, G3, G4)` instead of `max(G2, G3, G4)` and defeats the entire wave optimization. The "comfortable" pattern of one-Task-per-turn is the exact anti-pattern this skill exists to prevent.
+
+   ✅ Right: One assistant message with N Dispatch Maister agent-use blocks emitted before any of them returns. The runtime returns all N results before the next assistant turn.
+
+   Per-call parameters:
+   - subagent_type: `maister:task-group-implementer`
+   - prompt: per-group content + initial standards + INDEX.md path + spec excerpt + sibling-wave note (see "Subagent Invocation")
+
+   **SELF-CHECK before sending the message**: Are you about to emit a message with one `Task` call when the current wave has more than one group? If yes, STOP. Compose every wave member's prompt first, then emit them all in the same message. Awaiting one before composing the next violates this skill's contract. If the wave has exactly one group, a single `Task` call is correct.
+
+3. **Wait for all wave members to return**, then for each result:
+   - Parse completed steps, standards applied, test results.
+   - Mark all group checkboxes in `implementation-plan.md`.
+   - **Sync the HTML companion** (`implementation/implementation-plan.html`, if it exists): run ONE Bash command per completed group, substituting its number for `N` (idempotent — safe to re-run):
+     ```bash
+     sed -i '' -e 's/\(data-step="N\.[0-9][0-9]*" class="step \)todo/\1done/g' \
+               -e 's/\(data-group="N" class="group \)todo/\1done/g' \
+               implementation/implementation-plan.html
+     ```
+     (Linux: `sed -i` without `''`. The leading quote in `data-step="N\.` anchors the exact group — group 1 cannot match 11.) Then VERIFY: `grep -c 'data-group="N" class="group done"'` must return 1; if 0, append a warning to `work-log.md` (`HTML plan sync missed markers for Group N`) — a visible miss, never a silent one. File absent → skip silently; sync never blocks the wave.
+   - Add a group entry to `work-log.md` with standards trail.
+   - Verify test results are acceptable.
+   - `Maister task update` to `status: "completed"` with `metadata: {completed_at, tests_passed, files_modified, standards_applied, wave: N}`.
+
+4. **Partial-wave failure handling**:
+   - Do NOT cancel sibling subagents in the same wave — they may produce valid work even when one peer fails.
+   - After every wave member has returned, run the existing failure recovery flow (see "Error Handling" → "Subagent Failure") for each failed group individually.
+   - Mark successful groups in the wave as `completed` normally. Keep failed groups `in_progress` with `metadata: {failed_at, failure_reason, wave: N}` until the Maister user decision recovery path resolves them.
+   - The next wave is NOT computed until every failed group's recovery decision is made.
+
+5. After the wave fully resolves (all members `completed` or recovered), recompute the ready set and proceed to the next wave.
+
+   **SELF-CHECK before dispatching the next wave**: for every group marked `completed` this wave, did you run the HTML marker-flip command (step 3)? If unsure, run it now — it is idempotent.
+
+### `--sequential` Opt-Out
+
+Read `orchestrator.options.sequential` from `orchestrator-state.yml` at Phase 2 entry. When true (or when the validation fallback above triggered):
+
+- Treat every wave as size 1: dispatch groups one at a time in plan order, ignoring file-overlap analysis.
+- Functionally equivalent to the legacy serial loop.
+- Use cases: debugging a flaky group, constrained dev environments (single port, single DB schema), users who explicitly want serial execution.
+
+## Continuous Standards Discovery
+
+**Philosophy**: Standards are discovered when relevant, not memorized upfront.
+
+### Three Sources of Standards
+
+1. **Implementation Plan Standards**: The "Standards Compliance" section in implementation-plan.md lists standards identified during planning. Filter these per task group based on relevance.
+
+2. **INDEX.md Discovery**: The file `.maister/docs/INDEX.md` maps topics to standard files. Use it to find standards not listed in the plan.
+
+3. **Keyword-Triggered Discovery**: During execution, step descriptions may reveal need for additional standards.
+
+### Keyword Triggers (Suggestive, Not Exhaustive)
+
+These are **examples** to guide discovery. Do not limit discovery to only these triggers - use judgment to identify when other standards may apply.
+
+| Example Keywords | May Suggest Standards For |
+|------------------|---------------------------|
+| file, upload, download | file handling, storage |
+| auth, login, session | security, authentication |
+| email, notification | external services |
+| form, input, validation | forms, validation |
+| API, endpoint | api design, error handling |
+| migration, schema | database conventions |
+
+**Key principle**: If a step involves a concept that likely has project standards, check INDEX.md even if no keyword explicitly matches.
+
+### Discovery Flow
+
+```
+Per task group:
+  1. Check "Standards Compliance" section in implementation-plan.md
+     - Identify which listed standards are relevant to THIS group
+     - Read those standards
+
+  2. Check INDEX.md for additional standards matching group topic
+
+  3. During step execution:
+     - If step description suggests a standard may apply
+     - Check INDEX.md, read if found and not yet loaded
+     - Log discovery with trigger reason
+
+  4. Apply discovered standards to implementation
+```
+
+### Standards Reading Log Format
+
+```markdown
+## Standards Reading Log
+
+### Group 1: [Name]
+**From Implementation Plan**:
+- [x] .maister/docs/standards/backend/api.md - Listed in Standards Compliance
+
+**From INDEX.md**:
+- [x] .maister/docs/standards/global/naming.md - Group topic match
+
+**Discovered During Execution**:
+- [x] .maister/docs/standards/global/security.md - Step 1.3 (auth-related logic)
+
+### Group 2: [Name]
+**From Implementation Plan**:
+- [x] .maister/docs/standards/frontend/forms.md - Listed in Standards Compliance
+```
+
+## Subagent Invocation
+
+When delegating a task group, use this prompt structure:
+
+```markdown
+## Task: Execute Task Group [N]
+
+### Task Group Content
+[Paste the task group section from implementation-plan.md, including the `Visual References` block if present]
+
+### Specification Excerpt
+[Relevant sections from spec.md for this group]
+
+### Standards from Implementation Plan
+The implementation plan's "Standards Compliance" section lists these standards.
+Identify which are relevant to this group and read them:
+- [path/to/standard1.md] - [likely relevant because...]
+- [path/to/standard2.md] - [likely relevant because...]
+
+### Standards Discovery
+You have access to `.maister/docs/INDEX.md` for continuous standards discovery.
+- Check INDEX.md for additional standards matching this group's topic
+- During implementation, discover more standards as step context reveals needs
+- Do not limit discovery to explicit keyword matches - use judgment
+
+### Design Context
+[OMIT this section entirely when no `Visual References` are present in the task group AND no `analysis/design-context/` exists.]
+[OTHERWISE include:]
+- Design context root: `analysis/design-context/`
+- Brief excerpt (when present): [Layer 0 from `design-context/brief.md` + relevant screen sections]
+- Mockup files referenced by this group: [list paths from `Visual References`]
+- Inline ASCII excerpt (when ASCII mockup is small and directly relevant): [paste here]
+- Binding rule: each mockup in `Visual References` MUST be read before implementing; layout, copy, field order, and explicit states are binding; self-check each `acceptance` criterion before declaring done.
+
+### Sibling Wave
+[None] OR [Group K (Files to Modify: ...) is running in parallel in the same wave. File sets are disjoint per the executor's wave-computation invariant; do not edit paths outside your declared `Files to Modify`.]
+
+### Requirements
+1. Execute in test-driven order: tests (N.1) → implementation (N.2+) → verify (N.n)
+2. Log all standards applied (from plan, from INDEX.md, discovered during execution)
+3. When `Visual References` present: read each mockup before implementing, log per-reference compliance in your report
+4. Report any failures with root cause analysis
+5. Do NOT mark checkboxes - main agent handles that
+
+### Expected Output Format
+[See Subagent Output Format section]
+```
+
+## Subagent Output Format
+
+The task-group-implementer returns structured output:
+
+```markdown
+## Group [N] Execution Report
+
+### Status: [SUCCESS/PARTIAL/FAILED]
+
+### Steps Completed
+- [x] N.1 - [description]
+- [x] N.2 - [description]
+- [ ] N.3 - [description] (if incomplete)
+
+### Standards Applied
+**From Implementation Plan**:
+- .maister/docs/standards/backend/api.md
+
+**From INDEX.md** (group topic):
+- .maister/docs/standards/global/naming.md
+
+**Discovered During Execution**:
+- .maister/docs/standards/global/error-handling.md (step N.2, error handling logic)
+
+### Visual Compliance
+[OMIT this section entirely when the group had no `Visual References`.]
+[OTHERWISE: one line per reference]
+- ✓ analysis/design-context/mockups/login.html — screen:login — field order, error states, "Forgot password?" link match
+- ⚠ analysis/design-context/mockups/dashboard.html — screen:dashboard — 3-column layout matched, but icon set differs (used Heroicons; mockup shows custom icons — flagged for review)
+
+### Test Results
+**Command**: [test command run]
+**Result**: [N passed, M failed]
+**Details**: [if failures, brief explanation]
+
+### Files Modified
+- path/to/file1.ts (created)
+- path/to/file2.ts (modified)
+
+### Notes
+[Any decisions made, blockers encountered, recommendations]
+```
+
+## Test-Driven Enforcement
+
+### Pattern Per Task Group
+
+```
+N.1  - Write tests (2-8 focused tests)
+N.2  - Implementation step
+...
+N.n-1 - Implementation step
+N.n  - Run tests (only this group's tests)
+```
+
+### Enforcement
+
+Before executing step N.2 or higher:
+
+1. Verify N.1 (test step) is complete
+2. If not complete, use Maister user decision:
+   ```
+   Question: "Test step N.1 not completed. How to proceed?"
+   Header: "Tests"
+   Options:
+   - "Complete tests first" - Execute N.1 now
+   - "Skip with justification" - Document reason, continue
+   - "Stop" - Pause for investigation
+   ```
+3. If skipped, mark as `- [~] N.1 SKIPPED: [reason]`
+
+## Progress Tracking
+
+### Checkbox Marking
+
+**Format**: `- [ ]` → `- [x]` (or `- [~]` for skipped)
+
+**Timing**: Immediately after step completion. Never batch. Never mark ahead.
+
+**Responsibility**: Always main agent — subagent does NOT mark checkboxes.
+
+### Work-Log Updates
+
+After each task group:
+
+```markdown
+## [timestamp] - Group [N] Complete
+
+**Steps**: N.1 through N.M completed
+**Standards Applied**:
+- From plan: [list]
+- From INDEX.md: [list]
+- Discovered: [list with trigger reason]
+**Tests**: [N] passed
+**Files Modified**: [list]
+**Notes**: [any decisions or discoveries]
+```
+
+## Phase 3: Finalize
+
+1. **Validate completion**:
+   - No `- [ ]` checkboxes remain
+   - All groups have work-log entries
+   - Standards Reading Log is complete
+   - All group tasks are `completed` via `Maister task list` (cross-validate against markdown checkboxes)
+
+2. **Run full project test suite** (all tests, not just feature tests — catches regressions in unrelated areas)
+
+3. **Final work-log entry**:
+   ```markdown
+   ## [timestamp] - Implementation Complete
+
+   **Total Steps**: [N] completed
+   **Total Standards**: [M] applied
+   **Test Suite**: [status]
+   **Duration**: [if tracked]
+   ```
+
+4. **Return summary** to calling orchestrator
+
+## Error Handling
+
+### Subagent Failure
+
+If task-group-implementer reports failure:
+
+1. **Do NOT auto-rollback** - User-confirmed rollback only
+2. **Analyze root cause** from subagent output
+3. **Check for easy fixes**: config issues, missing dependencies, test setup
+4. **Use Maister user decision**:
+   ```
+   Question: "Group [N] implementation failed: [brief reason]. How to proceed?"
+   Header: "Failure"
+   Options:
+   - "Try suggested fix" - [if easy fix identified]
+   - "Retry group" - Re-invoke subagent
+   - "Complete manually" - Main agent completes remaining steps for this group
+   - "Rollback changes" - Revert this group's changes
+   - "Stop" - Pause for investigation
+   ```
+
+### Test Failure
+
+If tests fail after implementation:
+
+1. Analyze failure output
+2. If obvious fix: apply and re-run
+3. If unclear: use Maister user decision with options
+
+## Validation Checklist
+
+Before returning success:
+
+### Completion
+- [ ] All steps marked `[x]` or `[~]` (skipped with reason)
+- [ ] All task groups have work-log entries
+- [ ] Full test suite passes
+
+### Standards
+- [ ] Standards Reading Log complete for all groups
+- [ ] All three sources logged: from plan, from INDEX.md, discovered
+- [ ] Standards applied appropriately per step
+
+### Artifacts
+- [ ] implementation-plan.md checkboxes updated
+- [ ] work-log.md complete with timeline
+- [ ] No uncommitted partial changes
