@@ -1,51 +1,12 @@
 ---
 name: development
 description: Unified orchestrator for all development tasks. ALWAYS execute when invoked — never skip for 'straightforward' tasks. Phases adapt based on detected task characteristics rather than predetermined types. Use for any development work that modifies code.
+user-invocable: true
 ---
 
 # Development Orchestrator
 
 Unified workflow for all development tasks — bug fixes, enhancements, and new features. Phases activate based on context and analysis findings, not predetermined task types.
-
-## Capability Discovery and Portability
-
-Before executing initialization or any phase, inspect the tools actually exposed
-by the current host. Do not assume that a tool named in this skill exists.
-Identify the available implementation for these capabilities:
-
-- task tracking (`TaskCreate`, `TaskUpdate`, or an equivalent);
-- user decision gates (`ask_user`, `request_user_input`, or an equivalent);
-- skill loading/delegation (`Skill`, `tool_search`, or an equivalent);
-- file editing, shell execution, and browser/dashboard opening.
-
-Record the result in the workflow state under
-`orchestrator.capabilities` before starting Phase 1. If the host exposes a
-tool catalog such as `ALL_TOOLS`, query it directly; otherwise inspect the
-declared tool list or use the host's tool-discovery mechanism. Never report a
-tool as available merely because this skill mentions its name.
-
-Use this fallback matrix when a Maister-specific tool is absent:
-
-| Capability | Native path | Portable fallback |
-|---|---|---|
-| Task items | `TaskCreate`/`TaskUpdate` | Persist phases, IDs, and dependencies in `orchestrator-state.yml` and update them with file editing. |
-| Decision gate | `ask_user` | If an equivalent interactive tool exists, use it. Otherwise ask the same question in a normal user-visible message and stop before continuing. |
-| Skill delegation | `Skill`/`tool_search` | Read the referenced `SKILL.md` and execute its instructions with the available file/shell tools; do not pretend a delegated call happened. |
-| Dashboard | browser/file tools | Run the Maister dashboard scripts through `exec_command`; if opening a browser is unavailable, report the absolute path without blocking. |
-
-The fallback must preserve the workflow invariant, not merely skip the tool:
-state, artifacts, dependencies, summaries, gates, and verification remain
-required. If a mandatory gate cannot be represented safely, stop and ask the
-user rather than continuing silently.
-
-**Portable dashboard execution is mandatory when native dashboard/browser tools
-are absent.** Use `exec_command` to run the plugin's
-`orchestrator-framework/scripts/ensure-dashboards.mjs`,
-`generate-task-index.mjs` and the matching validators, including
-`validate-dashboard-state-sync.mjs`. Do not treat a missing
-browser opener as a reason to skip generation or central-index updates. Use
-`apply_patch` only for a narrowly scoped repair when a shared script cannot
-perform the required update, and record that repair in the workflow state.
 
 ## Initialization
 
@@ -61,18 +22,13 @@ If you find yourself reasoning "the user has been approving everything, so I can
 
 Full framework rule: `../orchestrator-framework/references/orchestrator-patterns.md` § 2 and § 2.1.
 
+When a phase summary contains decisions or risks, the dashboard projection MUST include the same ordered values and a `summary_keys` mapping. Run `validate-dashboard-state-sync.mjs` before presenting the gate and stop on mismatch; never present an incomplete dashboard.
+
 ### Step 1: Load Framework Patterns
 
 **Read the framework reference file NOW using the Read tool:**
 
 1. `../orchestrator-framework/references/orchestrator-patterns.md` - Delegation rules, interactive mode, state schema, initialization, context passing, issue resolution
-
-**Raw request preservation**: before generating a task title, slug, one-line
-description, or any phase summary, retain the complete payload supplied after
-the `$maister-copilot:development` marker. The payload is the user's source
-record. Do not use a paraphrase produced by the host, the task title, or a
-shortened `task.description` as a substitute. The first durable task artifact
-must contain that payload verbatim under `## Raw user request`.
 
 ### Step 2: Detect Research Context
 
@@ -91,9 +47,8 @@ must contain that payload verbatim under `## Raw user request`.
 1. **Capture the clock**: run `date -u +"%Y-%m-%dT%H:%M:%SZ"` via Bash NOW — you do NOT know the time from context. Every timestamp written this turn (`created`, `updated`, `generated`, `phases[].started`) uses this value. Date-only or `T00:00:00Z` values are the documented failure mode (orchestrator-patterns.md § 4 Timestamp Rule). Re-run `date` in later turns before writing timestamps.
 2. **Create Task Items**: Use `TaskCreate` for all phases (see Phase Configuration), then set dependencies with `TaskUpdate addBlockedBy`
 3. **Create Task Directory**: `.maister/tasks/development/YYYY-MM-DD-task-name/`
-4. **Capture the original request**: follow the shared input-artifact contract in `orchestrator-patterns.md` and write `input/user-request.md` before summarization or requirements gathering.
-4a. **Initialize State**: Create `orchestrator-state.yml` with `task.input_artifact: input/user-request.md`, task info, and research reference
-5. **Set up Operator Dashboard** (orchestrator-patterns.md § 8) — first read `.maister/config.yml` and set `orchestrator.options.html_output` (default true if the file/key is absent) and `orchestrator.options.mockup_format` (default `html`; read by Phase 4). **When `html_output` is false, SKIP this entire step** — no `dashboard.html`, no `dashboard-data.js`, no browser auto-open — and proceed. Otherwise: run `ensure-dashboards.mjs <project-root> <task-directory>` to create or repair both dashboard HTML assets, write the initial `dashboard-data.js` (all phases pending), then **auto-open it in the user's browser** (`open` / `nohup xdg-open ... >/dev/null 2>&1 </dev/null &` / `start` per platform, passing the plain absolute filesystem path — NEVER a hand-built `file://` URL). The Linux opener MUST be detached so a browser process that remains attached does not block the workflow; on failure just print the path — never block. On resume: run `ensure-dashboards.mjs` again, regenerate `dashboard-data.js` from state; then auto-open it in the browser again (same opener as a new task — the OS focuses an already-open tab rather than duplicating).
+4. **Initialize State**: Create `orchestrator-state.yml` with task info and research reference
+5. **Set up Operator Dashboard** (orchestrator-patterns.md § 8) — first read `.maister/config.yml` and set `orchestrator.options.html_output` (default true if the file/key is absent) and `orchestrator.options.mockup_format` (default `html`; read by Phase 4). **When `html_output` is false, SKIP this entire step** — no `dashboard.html`, no `dashboard-data.js`, no browser auto-open — and proceed. Otherwise: copy `../orchestrator-framework/assets/dashboard.html` to the task root as `dashboard.html`, write the initial `dashboard-data.js` (all phases pending), then **auto-open it in the user's browser** (`open` / `xdg-open` / `start` per platform, passing the plain absolute filesystem path — NEVER a hand-built `file://` URL; on failure just print the path — never block). On resume: re-copy `dashboard.html` only if missing; regenerate `dashboard-data.js` from state; then auto-open it in the browser again (same opener as a new task — the OS focuses an already-open tab rather than duplicating).
 6. **Discover project documentation**: Read `.maister/docs/INDEX.md` (if exists), extract ALL file paths from the "Project Documentation" section. This includes predefined docs (vision, roadmap, tech-stack, architecture) AND any user-added project docs (e.g., deployment.md, api-strategy.md). Store complete list as `project_context.project_doc_paths` in state.
 
 ### Step 4: Ingest Design Context
@@ -116,18 +71,6 @@ Mockups and design artifacts become **binding inputs** to implementation when pr
 
 **Skip if no sources detected** — proceed to phase execution without `design-context/`.
 
-When `html_output` is true, run `ensure-dashboards.mjs` to create or repair the project/task dashboard assets, then run the shared task-index generator and validator from `../orchestrator-framework/scripts/` against the project root.
-
-When the native dashboard helper is unavailable, the same operations MUST be
-performed with `exec_command` using the plugin script paths. On every resume
-and finalization, verify that the project-level `.maister/tasks/dashboard.html`
-and `.maister/tasks/dashboard-data.js` include the resumed task, then run
-`validate-task-index.mjs` and `validate-dashboard-state-sync.mjs` against the
-active task's dashboard and state; a task-level dashboard alone is insufficient. The
-central index generator must project `task.updated` first, then
-`orchestrator.updated`, and finally the state-file modification time for legacy
-states that contain neither field; it must never emit `updated: null`.
-
 **Output**:
 ```
 🚀 Development Orchestrator Started
@@ -143,19 +86,15 @@ Starting Phase 1: Codebase Analysis...
 
 ## Operator Visibility (applies to every phase)
 
-> **Config gate**: these rules assume `options.html_output` is true (read from `.maister/config.yml` at init, default true). When **false**: skip rule 2 entirely (no dashboard — no `dashboard.html`/`dashboard-data.js`, no browser open, no rewrites) and rule 3's companions (do NOT pass `html_style_guide_path`; subagents write md only). Rule 1 (§ 7 TL;DR blocks), state-write validation, and `phase_summaries` in state stay active either way.
-
-After every task-level dashboard rewrite trigger, refresh and validate the project-level task index with the shared generator and validator described in orchestrator-framework § 8.1. Skip this whenever `html_output` is false.
+> **Config gate**: these rules assume `options.html_output` is true (read from `.maister/config.yml` at init, default true). When **false**: skip rule 2 entirely (no dashboard — no `dashboard.html`/`dashboard-data.js`, no browser open, no rewrites) and rule 3's companions (do NOT pass `html_style_guide_path`; subagents write md only). Rule 1 (§ 7 TL;DR blocks) and `phase_summaries` in state stay active either way.
 
 Cross-cutting rules from `orchestrator-patterns.md` apply throughout this workflow:
 
-Dashboard projections must also be state-consistent: every phase entry that projects a `phase_summaries` decision or risk MUST include `summary_keys` and copy the ordered values exactly. Run `validate-dashboard-state-sync.mjs` before presenting the gate; stop on any mismatch instead of showing an incomplete dashboard.
+Before every gate and finalization, validate the dashboard/state projection with `validate-dashboard-state-sync.mjs`. A dashboard showing “No decisions recorded yet” while `phase_summaries` contains decisions is a workflow error.
 
 1. **Artifact Summary Contract (§ 7)**: every artifact-writing subagent prompt MUST include the contract instruction (artifacts open with TL;DR / Key Decisions / Open Questions / Risks (the writer heading is `## Open Questions / Risks`)). At context extraction, lift `decisions`, `risks`, and `artifacts` into `phase_summaries.[phase]` (shared entry shape, § 4).
 2. **Dashboard upkeep (§ 8)**: rewrite `dashboard-data.js` at every phase START (mark it `in_progress` before delegating), **BEFORE firing every exit gate** (register the finished phase's artifacts/summary/decisions/risks so the operator reviews them on the dashboard while answering — status stays `in_progress` until the gate passes), after every phase completion (including skips, with reason), every gate decision, every verification cycle, and at finalization. It is a terse projection of state — never duplicate artifact content into it.
 3. **HTML companions (§ 9)**: pass `html_style_guide_path` (absolute path to `../orchestrator-framework/references/html-report-style.md`) to specification-creator, implementation-planner, and e2e-test-verifier. Register returned `html_path` values in `phase_summaries.[phase].artifacts[].html`.
-4. **State writes (§ 4):** update `orchestrator-state.yml` key by key in place, validate it with a re-read after every write, and stop with `ask_user` on a malformed file — never continue on a state file the operator tooling cannot read.
-5. **Gate presentation:** before every exit gate, show the completed-phase summary, artifacts, decisions, risks, exact question, and next phase. If `ask_user` is unavailable, ask the same question in the normal user-visible response and stop there; never stop without a question. Use `AUTO-CONTINUE` when no unresolved decision, approval, failed artifact, or requested review exists.
 
 ---
 
@@ -227,9 +166,8 @@ Use for **all development tasks**: bug fixes, enhancements, new features, and an
 
 3. Save scope clarifications to `analysis/scope-clarifications.md`
 4. **Set optional phase defaults** based on detected characteristics:
-   - `options.e2e_enabled` = `ui_heavy`
-   - `options.user_docs_enabled` = `ui_heavy OR creates_new_entities`
-   - Write both values explicitly (`true` or `false`, never leave them `null`) and re-read state to verify the derivation.
+   - If `task_characteristics.ui_heavy: true` → set `options.e2e_enabled: true`, `options.user_docs_enabled: true`
+   - If `task_characteristics.creates_new_entities: true` → set `options.user_docs_enabled: true`
    - Command flags (`--e2e`, `--no-e2e`, `--user-docs`, `--no-user-docs`) override these defaults
 
 **Output**: `analysis/gap-analysis.md`, `analysis/scope-clarifications.md` (conditional)
@@ -357,14 +295,6 @@ ask_user - "UI mockups complete — review the live gallery at [companion URL] (
 **Output**: `analysis/technical-clarifications.md` (conditional), `analysis/requirements.md`, `implementation/spec.md`
 **State**: Update `task_context.tech_clarified`, `task_context.architecture_decision`, `phase_summaries.specification`
 
-**⛔ ARTIFACT GATE (fail-closed)**: After the specification-creator returns, verify all of the following before marking Phase 5 completed or presenting its exit gate:
-
-- `implementation/spec.md` exists and is non-empty;
-- `phase_summaries.specification` exists in `orchestrator-state.yml`;
-- `phase_summaries.specification.artifacts` contains `implementation/spec.md` (and the HTML companion when `html_output` is enabled).
-
-If any check fails, keep Phase 5 incomplete, record the missing artifact in `phase_summaries.specification` or `phase_errors`, and stop for recovery. Never proceed to Phase 6, Phase 7, or implementation with a missing specification.
-
 → **MANDATORY GATE** — fires regardless of permission mode, session-reminders, or prior approval patterns. Invoke `ask_user` now. Proceeding without a user response is a protocol violation (orchestrator-patterns.md § 2 / § 2.1).
 
 ask_user - Display executive summary before asking. Read `implementation/spec.md` and extract: spec title, scope boundaries (what's included and excluded), number of key requirements, architecture approach chosen (if any), assumptions made. Format as brief overview then "Continue to specification audit?"
@@ -395,8 +325,6 @@ ask_user - Display executive summary before asking. Read `verification/spec-audi
 > **Phase entry self-check**: Before executing this phase, locate the `ask_user` tool call from Phase 6 in this conversation. If you cannot point to its call ID, STOP and fire that gate now. State updates (`completed_phases`, `TaskUpdate`) without a corresponding `ask_user` call are protocol violations — never paper over a missed gate by updating state.
 
 **Purpose**: Break specification into implementation steps
-
-**⛔ PREREQUISITE GATE (fail-closed)**: Before invoking the implementation-planner, verify `implementation/spec.md` is present and non-empty and that Phase 5 has a registered `phase_summaries.specification` entry. If either check fails, return to Phase 5 recovery; do not generate `implementation/implementation-plan.md` from only the task description.
 
 **ANTI-PATTERN — DO NOT DO THIS:**
 - ❌ "Let me create the implementation plan..." — STOP. Delegate to implementation-planner.
@@ -475,8 +403,8 @@ ask_user - "TDD gate passed. Continue to Phase 10?"
 **Purpose**: Determine which verification checks to run using tiered decision matrix
 **Execute**: Direct - display plan, confirm/adjust via ask_user
 **Output**: Updated state with all verification options
-**State**: Set `options.code_review_enabled`, `options.pragmatic_review_enabled`, `options.reality_check_enabled`, `options.production_check_enabled`, `options.e2e_enabled`, `options.user_docs_enabled`, `options.skip_test_suite`
-**Auto-set**: `skip_test_suite: true` only when the implementation work-log records the full test suite as passed; otherwise set it to `false`. Clear it before any re-verification after fixes.
+**State**: Set `options.code_review_enabled`, `options.pragmatic_review_enabled`, `options.reality_check_enabled`, `options.production_check_enabled`, `options.e2e_enabled`, `options.user_docs_enabled`
+**Auto-set**: `skip_test_suite: true` (full test suite already passed during implementation phase; cleared before re-verification if fixes are applied)
 
 **Step 1**: Display the verification plan:
 ```
@@ -501,11 +429,9 @@ Verification Plan:
 **Q1** (always): ask_user (sequential single-select) — "Which standard verifications to run?"
 Options: "Code review (Recommended)", "Pragmatic review (Recommended)", "Reality check (Recommended)", "Production readiness (Recommended)". All pre-selected.
 
-**Q2** (ASK when `options.e2e_enabled` or `task_characteristics.ui_heavy` is true, or `--e2e` was given; skip only otherwise or with `--no-e2e`): ask_user — "Enable E2E browser verification?" Options: "Yes (Recommended)", "No, skip".
+**Q2** (SKIP if `options.e2e_enabled: false` and no `--e2e` flag): ask_user — "Enable E2E browser verification?" Options: "Yes (Recommended)", "No, skip".
 
-**Q3** (ASK when `options.user_docs_enabled`, `ui_heavy`, or `creates_new_entities` is true, or `--user-docs` was given; skip only otherwise or with `--no-user-docs`): ask_user — "Generate user documentation?" Options: "Yes (Recommended)", "No, skip".
-
-Write every answer as explicit `true`/`false`; finalization uses these values to determine whether optional phases were resolved.
+**Q3** (SKIP if `options.user_docs_enabled: false` and no `--user-docs` flag): ask_user — "Generate user documentation?" Options: "Yes (Recommended)", "No, skip".
 
 → **MANDATORY GATE** — fires regardless of permission mode, session-reminders, or prior approval patterns. Invoke `ask_user` now. Proceeding without a user response is a protocol violation (orchestrator-patterns.md § 2 / § 2.1).
 
@@ -624,11 +550,10 @@ ask_user - "Documentation complete. Continue to Phase 14?"
 
 **Process**:
 1. **Reconcile artifacts against disk** — compare every `artifacts[]` entry in state with what actually exists and name every missing path in the summary (`orchestrator-patterns.md` § 10)
-2. **Resolve phase preconditions** — every phase in the phase table must be completed or explicitly skipped by its activation condition. Phase 11 is never optional. If a phase is unresolved, ask whether to run it or finalize with the user's reason recorded in the summary and dashboard.
-3. Create workflow summary
-4. Execute the shared Change Approval and Commit Stage (§ 11): inspect the scoped diff, present the proposed Conventional Commit, ask for explicit approval, and record the resulting `commit` block. Do not commit unrelated worktree changes.
-5. Update task status to "completed" after the commit decision is recorded.
-6. Guide next steps (code review, PR, deployment)
+2. Create workflow summary
+3. Update task status to "completed"
+4. Provide commit message template
+5. Guide next steps (code review, PR, deployment)
 
 → End of workflow
 

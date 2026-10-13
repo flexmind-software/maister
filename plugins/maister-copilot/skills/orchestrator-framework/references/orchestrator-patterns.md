@@ -2,40 +2,6 @@
 
 Shared execution rules, schemas, and patterns for all workflow orchestrators.
 
-## 0. Capability Discovery and Host Portability
-
-Every orchestrator MUST inspect the tools exposed by the current host before
-initialization. Tool names in an orchestrator instruction are requirements for
-capabilities, not proof that those tools exist. Detect the host's task,
-interactive-question, delegation, file, shell, and browser capabilities from
-the available tool catalog or discovery mechanism and persist the result at
-`orchestrator.capabilities` in the state file.
-
-Use native tools when present. When a named tool is absent, use the equivalent
-capability if one exists; otherwise use the following portable fallbacks:
-
-- `TaskCreate`/`TaskUpdate`: represent task items and dependencies in
-  `orchestrator-state.yml` and update that file in place with validation.
-- `ask_user`: use the host's equivalent interactive question tool. If none is
-  available, present the exact gate question in a normal user-visible message
-  and stop; never continue past a mandatory gate without a response.
-- `Skill`/`tool_search`: read the referenced `SKILL.md` and execute it with the
-  available tools, while explicitly recording that native delegation was not
-  available.
-- Browser opening: generate and validate dashboard artifacts, report the
-  absolute path, and continue only when opening the browser is optional.
-
-When native dashboard/browser tooling is absent, use `exec_command` to run the
-shared dashboard scripts and use `apply_patch` only for a scoped repair. The
-portable path still MUST run `ensure-dashboards.mjs`,
-`generate-task-index.mjs`, `validate-dashboard-data.mjs`, and
-`validate-task-index.mjs`; browser opening is the only optional operation.
-
-Fallbacks must preserve all state, dependency, artifact, gate, and verification
-invariants. An orchestrator MUST NOT claim that a native tool call occurred
-when it did not. If no safe equivalent exists for a mandatory operation, stop
-and ask the user for direction.
-
 ---
 
 ## 1. Delegation Rules
@@ -93,12 +59,7 @@ For all analysis, planning, implementation, and verification phases: **ALWAYS DE
 
 `→ Pause` in older prose is a synonym for `→ MANDATORY GATE`.
 
-**`→ MANDATORY GATE` means STOP and obtain an explicit user response.** When the
-platform provides `ask_user`, invoke it and wait. When it does not, the
-orchestrator MUST render the completed-phase summary, the exact gate question,
-and the available choices as a normal user-visible message, then end the turn
-so the next user message is the response. It must never silently end after a
-phase summary and it must never invent an approval.
+**`→ MANDATORY GATE` means STOP and USE ask_user.** This is NOT optional. You MUST invoke the `ask_user` tool and WAIT for user response. Proceeding without it is a protocol violation.
 
 All orchestrators pause at `→ MANDATORY GATE` transitions for user review and prompt for optional phases.
 
@@ -132,21 +93,6 @@ Every phase that follows a `→ MANDATORY GATE` includes an entry check at its T
 
 This catches missed gates: if the previous phase's `→ MANDATORY GATE` was skipped (e.g., the model output a summary and moved on), the entry check forces the gate to fire before the next phase executes. If the gate already fired, continue normally.
 
-### Gate presentation contract
-
-Before every gate, the orchestrator must present enough information for the
-user to decide without reopening the task directory:
-
-1. what the phase produced (artifacts and verification result);
-2. key decisions and unresolved risks, copied from `phase_summaries`;
-3. the concrete question and its available choices; and
-4. what phase will run after each choice.
-
-If the gate has no user decision or review choice, label it as an automatic
-transition and follow the AUTO-CONTINUE rules. A phase must not appear to stop
-with no question. The dashboard projection must be refreshed before a gate so
-the same summary is visible there.
-
 ### AUTO-CONTINUE Rules
 
 When a phase ends with `→ **AUTO-CONTINUE**`:
@@ -155,10 +101,6 @@ When a phase ends with `→ **AUTO-CONTINUE**`:
 - Do NOT use ask_user
 - Do NOT wait for user input
 - After any summary, proceed immediately to the next phase
-
-AUTO-CONTINUE is only valid when the workflow has no unresolved decision,
-approval, failed artifact, or user-requested review at that transition. If any
-of those exists, use the gate presentation contract above instead.
 
 **Common mistake**: Outputting a summary and then stopping/ending the turn. The summary is fine — stopping is not.
 
@@ -200,11 +142,6 @@ prompt: |
 
   ## ARTIFACTS TO READ
   [List relevant files for full details]
-
-  ## ORIGINAL USER REQUEST
-  Read `[task_path]/input/user-request.md` for the exact original request.
-  Treat `task.description` and phase summaries as indexed context only; they
-  are not a lossless replacement for this artifact.
 
   ## ARTIFACT SUMMARY CONTRACT
   Open every markdown artifact you write with the summary block from
@@ -260,7 +197,6 @@ All orchestrators use `orchestrator-state.yml` at `.maister/tasks/[type]/YYYY-MM
 Every timestamp — `created`, `updated`, `phases[].started/completed`, `generated` in `dashboard-data.js`, dates in work-log entries — MUST be a **full ISO 8601 date AND time in UTC** (`2026-06-11T14:32:07Z`).
 
 - **NEVER write a date-only value** (`2026-06-11`) and **NEVER zero-fill the time** (`T00:00:00Z`) — you do not know the clock time from context, so GET it from the system: `date -u +"%Y-%m-%dT%H:%M:%SZ"` (one Bash call can serve every timestamp written in the same turn).
-- **NEVER write a timestamp that was not read from `date` in the same turn.** When back-filling a phase whose real start or end time was not captured, write `null` — never a plausible guess.
 - Why it matters: phase durations, "elapsed" displays, and freshness indicators on the operator dashboard are computed from these values — a midnight placeholder renders as nonsense durations.
 - Task *directory names* keep their date-only `YYYY-MM-DD-` prefix — that is a name, not a timestamp.
 
@@ -268,10 +204,10 @@ Every timestamp — `created`, `updated`, `phases[].started/completed`, `generat
 
 `orchestrator-state.yml` must stay valid YAML: operator tooling reads it with a strict parser and drops a run whose state file does not parse. Lenient loaders accept the common corruptions, so a broken file can go unnoticed for a whole workflow.
 
-- **Update key by key, in place** — each value that changes replaces its existing key's line or block where it already is. Never append a second copy of an existing key (`decisions_made:` as a block, then `decisions_made: []` later). A later duplicate silently replaces the earlier value, or makes the file unparseable. A key that does not exist yet goes inside its parent block, at the column of its siblings — never under a scalar, never at a guessed indentation.
+- **Update a key where it already is** — never append a second copy of an existing key further down (`decisions_made:` as a block, then `decisions_made: []` later). A later duplicate silently replaces the earlier value, or makes the file unparseable.
+- **New keys go inside their parent block, at the column of their siblings** — never under a scalar, never at a guessed indentation.
 - **Prefer rewriting the whole file** (Read it, change the values, Write it back) over appending fragments with Edit. When an edit is the smaller change, replace the existing key's line or block in place.
-- **Validate with a re-read after every write** — confirm that every key appears once at its level, every block's children share one column, nothing is nested under a scalar, and the intended values are present. A successful parse alone proves little: lenient parsers accept duplicate keys.
-- **A malformed state file stops the workflow** — report the key, line, and shape that are wrong and use `ask_user`: “Repair the state file” or “Let me investigate” (pause the workflow). Never continue on a state file the operator tooling cannot read.
+- **Re-read after every write** and check that no key repeats at the same level and that every block's children share one column. If the file is broken, repair it before doing anything else; never continue a phase on a state file you know is malformed.
 
 ### Project Configuration (`.maister/config.yml`)
 
@@ -323,21 +259,9 @@ orchestrator:
 task:
   title: [human-readable task title]
   description: [full task description]
-  input_artifact: input/user-request.md
   status: pending | in_progress | completed | failed | blocked
   tags: []
   priority: null  # high | medium | low
-
-# Change approval and commit provenance
-commit:
-  status: not_recorded | pending_approval | approved | committed | declined | blocked
-  sha: null
-  message: null
-  approved_by: null
-  approved_at: null
-  committed_at: null
-  changed_files: []
-  note: null
 ```
 
 The three keys above are the only `options` keys every orchestrator shares. `options` is an **open map** nested under `orchestrator:`: per-orchestrator keys are listed in each SKILL.md "Domain Context" section.
@@ -413,15 +337,13 @@ phase_summaries:
 
 ### Initialization Steps
 
-0. **Capture the raw invocation payload before interpretation**: preserve the complete user-provided payload that follows the Maister skill invocation marker (for example, everything after `$maister-copilot:development`). Keep headings, paragraphs, lists, blockquotes, identifiers, examples, and acceptance criteria verbatim. Do not derive this payload from a generated title, a one-line task description, a task slug, a requirements summary, or `phase_summaries`.
-1. **Parse arguments**: Extract description, type, entry point (`--from`), optional flags, while keeping the raw invocation payload from step 0 unchanged
+1. **Parse arguments**: Extract description, type, entry point (`--from`), optional flags
 2. **Determine starting phase**: New task starts Phase 1; resume reads state for first incomplete phase
 3. **Capture the clock**: run `date -u +"%Y-%m-%dT%H:%M:%SZ"` via Bash NOW — you do NOT know the time from context. Use the result for every timestamp written in this turn (`created`, `updated`, `generated`, `phases[].started`). This is a MANDATORY step, not optional: writing `created: 2026-06-12` or `T00:00:00Z` without having run `date` is the documented failure mode (§ 4 Timestamp Rule).
 4. **Read project config**: read `.maister/config.yml` if it exists; set `orchestrator.options.html_output` from its `html_output` key (default `true` when the file or key is absent — § 4 "Project Configuration"). This single read seeds the state; all dashboard/companion gates below read `options.html_output` from state.
 5. **Create task directory**: `.maister/tasks/<type>/<YYYY-MM-DD-slug>/` plus the subdirectories this workflow owns — each SKILL.md names its own; there is no structure shared by all five workflows *(skip on resume)*
-6. **Capture the original request**: create `input/user-request.md` and write the raw invocation payload from step 0 under `## Raw user request`. Do not summarize, truncate, normalize, or replace it with `task.description`. Include only minimal metadata around it (capture timestamp, workflow type, and invocation flags). Register the relative path in `task.input_artifact`. On resume, verify this file exists before continuing and treat it as the canonical source for the original request; never reconstruct the original request from summaries.
-7. **Create state file**: `orchestrator-state.yml` *(skip on resume)*
-8. **Set up operator dashboard** (§ 8) — *skip this entire step when `options.html_output` is false*: run `ensure-dashboards.mjs <project-root> <task-directory>` to create or repair both dashboard HTML assets, write the initial `dashboard-data.js`, then **auto-open it in the user's browser** with the platform opener — `open "[abs-task-path]/dashboard.html"` (macOS), `nohup xdg-open "[abs-task-path]/dashboard.html" >/dev/null 2>&1 </dev/null &` (Linux), `start "" "[abs-task-path]/dashboard.html"` (Windows). The Linux opener MUST be detached because some Chromium launchers remain attached until the browser exits and would otherwise block workflow initialization. Pass the **plain absolute filesystem path — NEVER construct a `file://` URL** (hand-built URLs get mangled, e.g. `file///` missing the colon; the opener resolves plain paths itself). If the command fails, just print the path hint — never block initialization. On resume: run `ensure-dashboards.mjs` again, regenerate `dashboard-data.js` from state; then auto-open it in the browser again (same opener as a new task — if the tab is already open the OS focuses it rather than duplicating).
+6. **Create state file**: `orchestrator-state.yml` *(skip on resume)*
+7. **Set up operator dashboard** (§ 8) — *skip this entire step when `options.html_output` is false*: copy `../assets/dashboard.html` (sibling `assets/` directory of this references/ file) to the task root as `dashboard.html`, write the initial `dashboard-data.js`, then **auto-open it in the user's browser** with the platform opener — `open "[abs-task-path]/dashboard.html"` (macOS), `xdg-open` (Linux), `start ""` (Windows). Pass the **plain absolute filesystem path — NEVER construct a `file://` URL** (hand-built URLs get mangled, e.g. `file///` missing the colon; the opener resolves plain paths itself). If the command fails, just print the path hint — never block initialization. On resume: re-copy `dashboard.html` only if missing; regenerate `dashboard-data.js` from state; then auto-open it in the browser again (same opener as a new task — if the tab is already open the OS focuses it rather than duplicating).
 8. **Create task items**: `TaskCreate` for all phases, then `TaskUpdate addBlockedBy` for dependencies. On resume, also restore completed phase statuses. When `TaskCreate`/`TaskUpdate` are unavailable in the session, record `task_ids: {}` and treat `orchestrator-state.yml` as the sole phase tracker; every other step is unchanged.
 9. **Output summary**: Show task info, phases, starting message — include the dashboard path hint `Dashboard: open [task-path]/dashboard.html in a browser to monitor progress` *only when `options.html_output` is true*.
 
@@ -444,16 +366,11 @@ Task system IDs are ephemeral to a session. On resume:
 
 ### Resume Logic
 
-1. **Read and validate state file** — Load `orchestrator-state.yml` and apply the § 4 Write Rule's re-read checks. A malformed file stops resume and requires user direction before any phase work.
-2. **Validate artifacts** — Check expected files and phase-summary registrations for every `completed_phases` entry. At minimum:
-   - Phase 5 requires non-empty `implementation/spec.md` plus `phase_summaries.specification.artifacts` containing that path;
-   - Phase 7 requires non-empty `implementation/implementation-plan.md` plus the planner's registered implementation-plan artifact;
-   - Phase 8 requires both Phase 5 and Phase 7 prerequisites.
-   If a required file or registration is missing, remove the phase from `completed_phases`, record the inconsistency, and resume from the earliest missing prerequisite. Never trust a completed-phase flag by itself.
+1. **Read state file** — Load `orchestrator-state.yml`
+2. **Validate artifacts** — Check expected files for `completed_phases`. If missing, remove from list.
 3. **Find resume point** — First phase not in `completed_phases`
 4. **Check prerequisites** — Verify required artifacts exist
 5. **Restore task items** — Re-create phase tasks and mark completed ones
-6. **Announce the resume point** — before doing phase work, state the current phase and next gate from state and the workflow phase table. Never infer workflow position from work-log task groups.
 
 | Starting From | Required Prerequisites |
 |---------------|----------------------|
@@ -531,26 +448,13 @@ Workflow artifacts accumulate deep detail for subagent context — but the human
 
 Each task directory carries a self-contained HTML dashboard so the operator can monitor workflow progress at a glance and deep-dive only when needed.
 
-The dashboard setup instructions in individual orchestrator skills are implemented
-through `scripts/ensure-dashboards.mjs`. That script is authoritative: it compares
-both HTML files with the plugin assets and repairs stale copies, not only missing
-files. The orchestrator must run it at initialization and on every resume before
-rewriting dashboard data. It never overwrites `dashboard-data.js`.
-
-After every dashboard-data rewrite, the orchestrator MUST verify that
-`<task-directory>/dashboard-data.js` exists and run
-`validate-dashboard-data.mjs` against it. When `html_output` is true, a missing
-or invalid data file is a workflow error: repair it and re-validate before
-continuing. The dashboard must never be left pointing at a non-existent sibling
-script.
-
 **Files** (both at task root):
 - `dashboard.html` — static viewer, copied verbatim from `[plugin]/skills/orchestrator-framework/assets/dashboard.html` at initialization (§ 5). NEVER generated or modified by the model — it is a maintained plugin asset.
 - `dashboard-data.js` — data projection written by the orchestrator. The viewer reads it via `<script>` (`window.MAISTER_DATA = {...}`), so it works from `file://` with no server.
 
 **Every rewrite starts with the clock**: run `date -u +"%Y-%m-%dT%H:%M:%SZ"` via Bash before writing (one call covers all timestamps in the same turn) — `generated`, `started`, `completed`, and state `updated` all take that value. Never guess the time, never reuse a value from an earlier turn (§ 4 Timestamp Rule).
 
-**When to rewrite `dashboard-data.js`** (full rewrite each time — it is a projection of `orchestrator-state.yml` plus `phase_summaries`, never an incremental patch). Interior progress is owned by the skill that owns the long-running phase:
+**When to rewrite `dashboard-data.js`** (full rewrite each time — it is a projection of `orchestrator-state.yml` plus `phase_summaries`, never an incremental patch):
 1. At initialization (all phases pending)
 2. **When a phase starts** (set its status to `in_progress` — BEFORE delegating to the skill/subagent, so the operator sees the running phase, not just the last completed one)
 3. **BEFORE firing every phase exit gate** — the phase's work is finished while the workflow waits (possibly long) for the user's answer. Register the phase's artifacts, summary, decisions, and risks NOW; the status stays `in_progress` until the gate passes (per § 2 state ordering). The operator reviews the finished work on the dashboard while deciding at the gate — a gate fired against a stale dashboard defeats its purpose.
@@ -558,25 +462,6 @@ script.
 5. After every gate decision (record the user's choice)
 6. After verification cycles (issues/fixes update)
 7. At finalization
-8. On entry to the implementation phase — regenerate from state and plan checkbox progress
-9. After every implementation wave and at implementation finalization — preserve group progress, skipped groups, and reverted groups
-10. After every verification cycle, including re-verification after fixes
-
-When `html_output` is false, all dashboard rewrites are skipped. A failed interior rewrite must be recorded in the relevant work-log or phase summary but must not block the workflow.
-
-The central project index is part of the dashboard contract. After every task
-dashboard rewrite trigger, regenerate and validate
-`.maister/tasks/dashboard-data.js` through the shared scripts, and verify that
-the active task path and status are present. A valid task-level dashboard does
-not replace this central-index update.
-
-**Projection validation (mandatory):** after every rewrite, run
-`node ../orchestrator-framework/scripts/validate-dashboard-data.mjs <task-path>/dashboard-data.js`
-from the plugin skills directory. Do not leave a failed projection in place. The
-projection must use the schema below exactly: phase titles are stored as `name`
-(never only `title`), and every artifact is an object with at least `path` (not a
-bare path string). The validator is intentionally mechanical because the static
-viewer cannot display or link shorthand records reliably.
 
 **Schema**:
 
@@ -592,16 +477,6 @@ window.MAISTER_DATA = {
     current_activity: null        // short present-continuous line for the running phase
                                   // (the phase's activeForm) — shown as "Now: ..." in the header
   },
-  commit: {                         // mirror of the top-level commit block
-    status: "not_recorded",         // pending_approval|approved|committed|declined|blocked
-    sha: null,
-    message: null,
-    approved_by: null,
-    approved_at: null,
-    committed_at: null,
-    changed_files: [],
-    note: null
-  },
   characteristics: {},            // task_characteristics / design_characteristics when present
   phases: [{
     id: "phase-1", name: "", icon_hint: "analysis|spec|plan|code|verify|docs|done",
@@ -614,8 +489,7 @@ window.MAISTER_DATA = {
     decisions: [],                // [{decision, rationale}]
     risks: [],                    // [string]
     artifacts: [],                // [{path, label, html}] — paths relative to task root
-    gate: null,                   // {question, answer} after the exit gate fires
-    progress: null                // optional {groups_done, groups_total, current_wave, skipped: [], reverted: []}
+    gate: null                    // {question, answer} after the exit gate fires
   }],
   verification: {                 // mirror of verification_context, when it exists
     status: null,
@@ -635,34 +509,6 @@ window.MAISTER_DATA = {
 **Resolved risks**: when a previously recorded risk gets resolved in a later phase, keep the entry and prefix it with `resolved:` (e.g. `"resolved: transient warning — query lookup chosen"`). The viewer dims and strikes resolved entries, separating live risks from settled ones.
 
 The viewer decides presentation (hero artifacts per workflow type, collapsed drawers, severity colors) — orchestrators only supply data.
-
-### 8.1 Central Task Index
-
-The task dashboard above is per-task. Orchestrators MUST also maintain the
-project-level index described in `orchestrator-framework/SKILL.md` when
-`options.html_output` is true. This index is the operator's cross-task view and
-must contain at least type, name, short description, status, next action, updated
-time, and links to the task dashboard and `orchestrator-state.yml`.
-
-Use the shared scripts rather than embedding a second YAML parser in an
-orchestrator:
-
-```bash
-node <plugin-root>/skills/orchestrator-framework/scripts/generate-task-index.mjs <project-root>
-node <plugin-root>/skills/orchestrator-framework/scripts/validate-task-index.mjs <project-root>/.maister/tasks/dashboard-data.js
-```
-
-Run both commands after initialization/resume, phase starts/completions, gate
-decisions, verification cycles, and finalization. The central asset is copied
-only when missing; never overwrite an operator's task state or individual task
-dashboard data. The generated `dashboard-data.js` is a projection and may be
-regenerated at any time.
-
-The generator resolves the central-index `updated` value in this order:
-`task.updated`, `orchestrator.updated`, then the modification time of
-`orchestrator-state.yml`. Legacy states must therefore still receive a
-non-null sortable timestamp in the generated index; the source state is not
-mutated by this fallback.
 
 ---
 
@@ -693,10 +539,7 @@ Selected high-value artifacts get a rich HTML companion written by the **same su
 - Companions follow the shared style guide: `html-report-style.md`, the file beside this one. Self-contained single file, no external resources, relative links/images only.
 - When `options.html_output` is true, orchestrators MUST pass the absolute path of that style guide to every companion-writing **agent** as `html_style_guide_path` (you know it — it sits next to the patterns file you read at initialization). When false, omit it (the config gate above). **Skills** that write companions (`implementation-verifier`) receive no such parameter: they resolve the guide themselves and gate on `orchestrator.options.html_output` in state.
 - Register companions in `phase_summaries.[phase].artifacts[].html` so the dashboard (§ 8) links HTML first with md fallback (`html: null` when companions are disabled).
-- Companion generation itself must not prevent the markdown artifact from being
-  preserved. However, when a companion is required by the artifact table and
-  `html_output` is true, its absence is a verification/finalization failure;
-  it must not be downgraded to an informational warning.
+- Companion generation must never block the workflow: if it fails, keep the md, log the miss, continue.
 
 ---
 
@@ -715,40 +558,10 @@ missing, omit the block — silence here means the declaration held.
 
 **What not to do**: reconciliation reports, it never repairs. Do not re-run a phase, regenerate a
 companion or delete the stale entry from state; the entry is the evidence that the artifact was
-promised. Missing required artifacts block completion. Missing optional artifacts may be reported
-as warnings only when the workflow specification explicitly marks them optional.
+promised. Nor does it block completion — a workflow with a missing artifact still finishes, with
+the miss named.
 
 **Why it exists**: an orchestrator can transcribe what a subagent returned, and the verdict then
 reads as if the artifact existed. The transcription is the orchestrator's summary of a subagent's
 words, not the subagent's own artifact, and nothing else in the run records that the substitution
 took place. This comparison is what makes that visible.
-
-## 11. Change Approval and Commit Stage
-
-Every orchestrator that changes code, configuration, tests, documentation, or
-workflow artifacts MUST finish with a visible change-approval/commit stage. This
-stage is separate from verification and is shown in both the task dashboard and
-the central task index.
-
-Before marking the task fully complete:
-
-1. Read `git status --short`, `git diff --stat`, and `git diff --check`.
-2. Separate files belonging to this task from unrelated user changes. Never
-   stage or commit unrelated worktree changes.
-3. Present the changed-file summary, verification result, proposed Conventional
-   Commit message, and any remaining risks to the user.
-4. Ask for explicit approval to commit. Approval to finish the workflow is not
-   implicit permission to create a commit.
-5. On approval, stage only the scoped files, create the commit, capture the exact
-   SHA and subject with `git rev-parse HEAD` and `git log -1 --format=%s`, then
-   write them to the top-level `commit` block in `orchestrator-state.yml`. The
-   post-commit state update is bookkeeping; do not silently fold unrelated
-   changes into the commit just to make the state file clean.
-6. Without approval, leave the worktree unchanged, set `commit.status` to
-   `declined` or `pending_approval`, and finish with an explicit uncommitted
-   state. If the scope is unsafe or mixed, use `blocked` and explain why.
-
-The commit stage must not fabricate a SHA, claim a commit for a dirty worktree,
-or hide files excluded from the commit. A completed task may therefore
-legitimately have `commit.status: pending_approval` or `declined`; the dashboard
-must make that visible.

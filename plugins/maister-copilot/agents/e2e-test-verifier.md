@@ -102,15 +102,15 @@ This agent focuses on **evidence-based runtime verification**, not test file gen
 
 **For Each Test Scenario**:
 
-**Navigation**: Use the Playwright MCP `browser_navigate` tool to load application pages
+**Navigation**: Use `mcp__playwright__navigate` to load application pages
 
-**Interaction**: Use `browser_click`, `browser_type`, or `browser_fill_form` for user actions
+**Interaction**: Use `mcp__playwright__click` and `mcp__playwright__fill` for user actions
 
-**Verification**: Use `browser_snapshot` or `browser_evaluate` to check DOM state, element visibility, and content
+**Verification**: Use `mcp__playwright__evaluate` to check DOM state, element visibility, content
 
-**Evidence Collection**: Use `browser_take_screenshot` after significant steps
+**Evidence Collection**: Use `mcp__playwright__screenshot` after significant steps
 
-**Console Monitoring**: Use `browser_console_messages` to detect errors
+**Console Monitoring**: Use `mcp__playwright__console_messages` to detect errors
 
 **Execution Pattern**:
 1. Navigate to starting page
