@@ -141,6 +141,7 @@ class BuildTests(unittest.TestCase):
         self.assertTrue((self.output /
                          manifest['extensions']['com.openai']['hooks']).exists())
         self.assertTrue((self.output / 'runtime/tasks.py').is_file())
+        self.assertTrue((self.output / 'runtime/checkpoint.py').is_file())
         self.assertTrue((self.output / 'hooks/guard.py').is_file())
         instructions = (self.output / 'AGENTS.md').read_text()
         self.assertIn('$maister:<operation>', instructions)

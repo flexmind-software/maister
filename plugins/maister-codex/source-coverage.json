@@ -84,7 +84,7 @@
   "skills/orchestrator-framework/assets/tasks-dashboard.html": "edb2fc057410f08780f847eef9b8f22d2b39c7317940724910e242732b255474",
   "skills/orchestrator-framework/references/html-report-style.md": "a3a74ccc20e83e4c9ac4a7c0421d92e8e064548a5475368a50d5c92757ddfa31",
   "skills/orchestrator-framework/references/orchestrator-creation-checklist.md": "a8289d6a19b81ef93d8780bc5f456b8d916acf32e315bb9a201943431ba71345",
-  "skills/orchestrator-framework/references/orchestrator-patterns.md": "ddfd7e06843a848ce9d5de0749617d43e96c61fb1a05e7846c4f8ae97213c9fa",
+  "skills/orchestrator-framework/references/orchestrator-patterns.md": "419a8f081718d8c475df8b87a90e6692ff1218e92fc22566be9324d4b9c9e9e8",
   "skills/orchestrator-framework/scripts/ensure-dashboards.mjs": "614063b840c3af3b780e9cd4e86a85996cf08a9083f655cd97ec48bf8a5e2165",
   "skills/orchestrator-framework/scripts/generate-task-index.mjs": "0f4a0b23deee7a9c7d78d1209173fe2629e36f29712b4cec15c7a57a35ece02e",
   "skills/orchestrator-framework/scripts/validate-dashboard-data.mjs": "ba25eb9a3a391318e73e3139c4bf0c0f8fa2cff05ae7b2e9cc9ffc363e7321ee",

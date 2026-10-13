@@ -79,15 +79,25 @@ completed tasks in dependency order. Only the parent writes the registry, even
 when workers execute concurrently. Adapter errors must be reported, not ignored.
 Quick workflows without a task directory do not need a registry.
 
+At a checkpoint, run
+`python3 "<root>/runtime/checkpoint.py" --task-path "<task-path>" capture`
+and copy its `algorithm`, `branch`, `commit`,
+`working_tree_status`, and `working_tree_fingerprint` to the matching
+`session_handoff` fields (`fingerprint_algorithm` stores `algorithm`).
+Run capture again after writing the state; its fingerprint must remain equal.
+
 Before any resumed task mutation, read `session_handoff` from
-`orchestrator-state.yml`. Compare its saved branch and checkpoint commit with
-`git branch --show-current` and `git rev-parse HEAD`; compare its saved
-`working_tree_status` with `git status --short`, and inspect the active-batch
-diff. Recompute and compare `working_tree_fingerprint` using the shared
-orchestrator-patterns.md contract. Confirm `last_verified_commit` is an
-ancestor of HEAD when present.
-Reconcile a mismatch before continuing; do not overwrite the checkpoint with
-the observed state merely to make the check pass. Then list `codex-tasks.json`
+`orchestrator-state.yml`. Run
+`python3 "<root>/runtime/checkpoint.py" --task-path "<task-path>" verify --expected-algorithm "<saved-fingerprint-algorithm>" --expected-fingerprint "<saved-working-tree-fingerprint>"`.
+The command must exit zero and return
+`match: true`. Compare its branch, commit, and `working_tree_status` with the
+saved values, and inspect the active-batch diff. Confirm
+`last_verified_commit` is an ancestor of HEAD when present. A missing or
+unknown `fingerprint_algorithm` on an existing digest is a legacy checkpoint:
+stop automatic mutation, inspect the diff, and request an explicit user decision
+before replacing it. Never guess the byte encoding or silently rebaseline.
+Reconcile any other mismatch before continuing; do not overwrite the checkpoint
+with the observed state merely to make the check pass. Then list `codex-tasks.json`
 through this adapter and verify every saved `orchestrator.task_ids` entry
 resolves to the same phase task. Missing or corrupt registry data is an error,
 not permission to recreate the task list. A legacy task without a handoff may

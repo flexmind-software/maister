@@ -347,6 +347,7 @@ session_handoff:
   last_verified_commit: abc1234   # null if no committed revision was verified
   working_tree_status: []         # git status --short entries at checkpoint
   working_tree_fingerprint: null   # hash of staged/unstaged diffs and untracked file contents
+  fingerprint_algorithm: maister-git-sha256-v1
   next_action: Continue timeout fix
   pending_user_decision: null
 ```
@@ -359,10 +360,21 @@ binary diffs plus untracked file contents. Use null when a value is unknown;
 never invent a commit or fingerprint. The task remains active across sessions. After a coherent
 batch, a new Codex session may resume the same task, especially after repeated
 compactions. Do not clear the session while a fix is in progress.
-Compute the fingerprint deterministically from `git diff --binary --no-ext-diff`,
-`git diff --cached --binary --no-ext-diff`, and a path-sorted list of untracked
-files with each file's content hash. Exclude the task's own state/dashboard
-files from this comparison so checkpoint writes do not invalidate it.
+For new checkpoints, use the versioned `maister-git-sha256-v1` encoding. Hash
+the UTF-8 bytes `maister-git-sha256-v1` and a NUL byte first. Then, in order,
+hash `unstaged` + NUL + an eight-byte big-endian length + the raw output of
+`git diff --binary --no-ext-diff`, and `staged` + NUL + the same framing for
+`git diff --cached --binary --no-ext-diff`. Exclude the task's
+`orchestrator-state.yml`, `dashboard.html`, and `dashboard-data.js` from both
+diffs. For each remaining path from `git ls-files --others --exclude-standard -z`,
+sorted by raw path bytes, hash `untracked` + NUL + its eight-byte path length +
+raw path bytes, then an eight-byte content length and content. The content is
+`file` + NUL + the 32 raw SHA-256 bytes of a regular file, or `link` + NUL +
+the raw symlink target bytes. Store the final lowercase SHA-256 hex digest and
+the algorithm name together. Codex MUST use its bundled
+`runtime/checkpoint.py` for both capture and verification; do not reconstruct
+the serialization from memory. A checkpoint without this algorithm name is
+legacy and cannot be treated as a verified fingerprint on resume.
 
 ### Shared: phase_summaries entry shape
 
@@ -423,12 +435,16 @@ Task ID lifetime depends on the platform. On resume:
 2. **Validate repository checkpoint** — Compare `session_handoff.branch` and
    `checkpoint_commit` with the current branch and HEAD, then compare recorded
    `working_tree_status` with `git status --short`, recompute the working tree
-   fingerprint, and inspect the actual diff for the active batch. Check that
+   fingerprint with the recorded algorithm, and inspect the actual diff for the
+   active batch. For Codex, use `runtime/checkpoint.py verify` with the saved
+   algorithm and digest; a nonzero result stops automatic mutation. Check that
    `last_verified_commit`, when present, is an
    ancestor of HEAD. If branch, commit, or changes differ, stop automatic
    mutation, inspect the discrepancy, update the checkpoint only after
    reconciling it, and ask the user when intent cannot be determined. A missing
-   handoff in an older task is allowed; establish one from observed state.
+   handoff in an older task is allowed; establish one from observed state. A
+   saved digest without a known algorithm must not be silently rebaselined:
+   inspect the diff and get an explicit user decision before replacing it.
 3. **Validate artifacts** — Check expected files for `completed_phases`. If
    missing, diagnose before changing phase history.
 4. **Find resume point** — Use the saved active phase and batch when valid;
