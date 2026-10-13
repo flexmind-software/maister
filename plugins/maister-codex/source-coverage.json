@@ -1,5 +1,5 @@
 {
-  ".claude-plugin/plugin.json": "9e3a2101eb3e01e1ced3e57bf43d79a4fff27c9077aef1321d2af8317b7e4013",
+  ".claude-plugin/plugin.json": "ebc36dab6378254d66b68ac7f2878c7159d0d2ece91bb143928a445497aa2c53",
   ".mcp.json": "65a30f415f680a4513237ebc1e20feaa3967d42026d70436dd9f4d1cb74866f9",
   "CLAUDE.md": "d6dc0626f06b7503906436b209580ea7c1763a07ed9faf9e5faf4579235f79ad",
   "LICENSE": "335ae740d597dfa4853b23e8b89dad51fd2afd9637d23e0f3774f712296ab1e8",
@@ -38,7 +38,7 @@
   "hooks/hooks.json": "53bcf05b3366031220574a2e74bbb2b30c49daa08c3ad00e7df40fa1afbc33a7",
   "hooks/post-compact-reminder.sh": "17a049b34fefe47e28e6819a1849fdfcd1d592543fb9a8b41847b2e8b9f6f6e1",
   "hooks/skill-invocation-reminder.sh": "cf597ebd04b5701fcffb3bcd9c53a17769d767d1a645231a24249f0053f00dd4",
-  "plugin.json": "9417ff717b37e6ff84e3985c639aa47d1a9879ab796485f1331edcf54f66ff25",
+  "plugin.json": "09d44b34d5f90e5d100395afbe4ef1ac669158ceabe7c150bb1bcfc4454244e3",
   "skills/codebase-analyzer/SKILL.md": "93b6184e3786429aa50149fd3c2d7b0f48c3c3d23b471addbe12864bd6881f33",
   "skills/codebase-analyzer/references/code-analysis.md": "87e76521373a169f8bae105b40efb15d5caf54d5335e6846a9653fcc692efdc0",
   "skills/codebase-analyzer/references/combined.md": "a4253d9721d645511ea69cc786efc5b511e4158915374bee51f6fffd0cd6cbe5",
