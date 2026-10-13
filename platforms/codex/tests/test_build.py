@@ -84,8 +84,11 @@ class BuildTests(unittest.TestCase):
     def test_manifests_and_scripts(self):
         manifest = json.loads((self.output / 'plugin.json').read_text())
         self.assertEqual(manifest['name'], 'maister')
-        self.assertEqual(manifest['version'],
-                         json.loads((BUILD.SOURCE / 'plugin.json').read_text())['version'])
+        version = manifest['version']
+        self.assertEqual(version, json.loads((BUILD.SOURCE / 'plugin.json').read_text())['version'])
+        self.assertEqual(version, json.loads((BUILD.SOURCE / '.claude-plugin/plugin.json').read_text())['version'])
+        self.assertEqual(version, json.loads((BUILD.ROOT / '.claude-plugin/marketplace.json').read_text())['version'])
+        self.assertEqual(version, json.loads((BUILD.ROOT / 'plugins/maister-copilot/plugin.json').read_text())['version'])
         self.assertTrue((self.output / 'skills').is_dir())
         self.assertTrue((self.output / 'mcp.json').is_file())
         self.assertTrue((self.output /
