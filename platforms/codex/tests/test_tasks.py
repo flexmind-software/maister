@@ -72,6 +72,27 @@ class TaskTests(unittest.TestCase):
         self.assertEqual(json.loads(run.stdout)['id'], '1')
         self.assertEqual(self.registry.execute('get', {'taskId': '1'})['subject'], 'CLI task')
 
+    def test_resume_across_cli_processes_reuses_phase_ids(self):
+        command = [sys.executable, str(ROOT / 'runtime/tasks.py'),
+                   '--task-path', self.temp.name]
+
+        def call(operation, fields=None):
+            result = subprocess.run(command + [operation, '--json', json.dumps(fields or {})],
+                                    capture_output=True, text=True, check=True)
+            return json.loads(result.stdout)
+
+        first = call('create', {'subject': 'Phase 1'})['id']
+        second = call('create', {'subject': 'Phase 2'})['id']
+        call('update', {'taskId': second, 'addBlockedBy': [first]})
+        call('update', {'taskId': first, 'status': 'completed'})
+        # Each call starts a fresh adapter process, as a resumed Codex session does.
+        resumed = call('list')
+        self.assertEqual([task['id'] for task in resumed], [first, second])
+        self.assertEqual(resumed[1]['blockedBy'], [first])
+        call('update', {'taskId': second, 'status': 'in_progress'})
+        self.assertEqual(len(call('list')), 2)
+        self.assertEqual(call('get', {'taskId': second})['status'], 'in_progress')
+
     def test_corrupt_registry_not_overwritten(self):
         self.registry.path.write_text('not json')
         with self.assertRaises(ValueError):

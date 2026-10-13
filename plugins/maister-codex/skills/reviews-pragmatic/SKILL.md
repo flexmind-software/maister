@@ -79,6 +79,20 @@ completed tasks in dependency order. Only the parent writes the registry, even
 when workers execute concurrently. Adapter errors must be reported, not ignored.
 Quick workflows without a task directory do not need a registry.
 
+Before any resumed task mutation, read `session_handoff` from
+`orchestrator-state.yml`. Compare its saved branch and checkpoint commit with
+`git branch --show-current` and `git rev-parse HEAD`; compare its saved
+`working_tree_status` with `git status --short`, and inspect the active-batch
+diff. Recompute and compare `working_tree_fingerprint` using the shared
+orchestrator-patterns.md contract. Confirm `last_verified_commit` is an
+ancestor of HEAD when present.
+Reconcile a mismatch before continuing; do not overwrite the checkpoint with
+the observed state merely to make the check pass. Then list `codex-tasks.json`
+through this adapter and verify every saved `orchestrator.task_ids` entry
+resolves to the same phase task. Missing or corrupt registry data is an error,
+not permission to recreate the task list. A legacy task without a handoff may
+establish one from observed repository state before resuming.
+
 ## Maister planning-only mode / Maister plan approval
 
 For quick-plan, perform read-only exploration and design: no application edits
@@ -102,6 +116,7 @@ commands for every agent because PreToolUse does not reliably identify roles.
 Human-confirmed destructive recovery must be performed by the human outside
 automated execution. The guard is lexical defense-in-depth, not a sandbox or
 complete protection against arbitrary shell code. Keep runtime sandboxing.
+
 
 ---
 

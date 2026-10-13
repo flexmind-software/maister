@@ -447,7 +447,10 @@ Options: "Code review (Recommended)", "Pragmatic review (Recommended)", "Reality
 
 **Execute**:
 
-**Step 1**: Invoke Skill tool - `maister:implementation-verifier`
+**Step 1**: Invoke Skill tool - `maister:implementation-verifier`.
+After the initial full verification run, set `verification_context.cycle` and
+`verification_cycles` to 1 (or increment them if resuming an existing ledger),
+reconcile the returned findings, and save the first checkpoint.
 
 **Step 2**: Display detailed issue breakdown grouped by category and severity:
 ```
@@ -466,27 +469,50 @@ Verification Results:
 - `status: passed` → skip to Post-Verification Continuation
 - `status: passed_with_issues` or `failed` → enter user-driven fix loop (Step 4)
 
-**Step 4**: User-driven fix loop (max 3 iterations):
-1. Present all critical + warning issues as a numbered list
+**Step 4**: User-driven fix batches with progress control:
+1. Reconcile verifier findings into `verification_context.issues` using stable
+   IDs. Show all open critical + warning issues with ID, severity, status,
+   attempts, and evidence path. Preserve verified and deferred entries.
 2. AskUserQuestion — "Which issues should I fix?" with options:
    - "Fix all fixable issues" (convenience default)
-   - "Let me choose specific issues" (user picks by number)
+   - "Let me choose specific issues" (user picks by ID)
    - "Skip fixes, proceed as-is"
-3. Fix selected issues, log each to `verification_context.fixes_applied`
-4. After fixes applied: set `skip_test_suite: false` (code changed, tests must re-run)
-5. AskUserQuestion — "Re-run verification to check fixes?" with options:
+3. Group selected issues by root cause and dependency. Record each batch ID,
+   issue IDs, files, and dependency order in `implementation/work-log.md`.
+   Reuse the executor's wave rules: parallel dispatch only after checking
+   dependencies and overlapping files; otherwise run batches sequentially.
+   Finish a batch, update its work log, and checkpoint before reverification.
+4. Fix selected issues and log actions to `verification_context.fixes_applied`.
+   Increment an issue's `attempts` only when a fix fails its targeted check or
+   re-verification. At three failed fixes for the same ID, re-diagnose the
+   cause and dependencies before any fourth attempt; if the new diagnosis
+   cannot make progress, ask the user whether to defer, change approach, or
+   stop. Different issues do not consume each other's attempt budget.
+5. After code changes, set `skip_test_suite: false` (tests must re-run).
+   AskUserQuestion — "Re-run verification to check fixes?" with options:
    - "Yes, re-run verification" → re-invoke `maister:implementation-verifier` → return to Step 2
    - "No, proceed to next phase"
-6. Update `verification_context.reverify_count`
+6. After each completed full verification run, increment
+   `verification_context.verification_cycles`, set `cycle` to that value,
+   and update the legacy `reverify_count` to the number of reruns after the
+   initial verification for dashboard compatibility.
+   Reconcile issue statuses and evidence from the new report, then checkpoint
+   `session_handoff`. At 20 cycles, pause for a user decision to continue
+   with a new explicit cycle budget or stop; never silently treat the cap as
+   a passing result. A new issue does not force the task to stop early.
 
 **Exit conditions**:
 - No critical issues remain → proceed
 - User explicitly chooses "Skip fixes, proceed as-is" or "No, proceed to next phase" → proceed with issues logged
-- Max 3 iterations reached → AskUserQuestion: "Proceed with known issues?" / "Stop workflow"
+- Three failed fixes for one issue → re-diagnose; seek a decision if still blocked
+- 20 verification cycles reached → checkpoint, then ask whether to extend the budget or stop
 - **MUST NOT proceed with unresolved critical issues unless user explicitly approves**
 
 **⚠️ POST-VERIFICATION CONTINUATION** — After issue resolution completes:
 1. **Canonical report check**: `verification/implementation-verification.md` + `.html` MUST reflect the FINAL post-fix verdict before leaving this phase. If fixes were applied and the canonical report still shows the pre-fix state (regardless of whether re-checks were run via the full verifier skill or individual subagents writing `*-reverify.md` side files), re-invoke `maister:implementation-verifier` (or have it recompile Phase 3) so the report and companion are rewritten with a "Fix & Re-Verification History" section. A stale pre-fix report is a phase-exit violation.
+   If the user declines re-verification after code changes, recompile the
+   canonical report without claiming a fresh check, mark those changes
+   unverified, and request explicit approval before moving on with known issues.
 2. Read `orchestrator-state.yml` to confirm you are the orchestrator
 3. Update state: add Phase 11 to `completed_phases`
 4. Proceed to Phase 12
@@ -670,7 +696,7 @@ orchestrator:
 | 7 | 2 | Regenerate plan |
 | 8 | 5 | Fix syntax, imports, tests |
 | 9 | 3 | Return to implementation |
-| 11 | 3 | Fix tests, re-run |
+| 11 | 3 failed fixes per issue; 20 full verification cycles | Re-diagnose a stuck issue; checkpoint and ask before extending the cycle budget |
 
 ---
 

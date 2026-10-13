@@ -304,7 +304,10 @@ Research context flows to ALL phases via context passing. Artifacts are also cop
 
 ### Shared: verification_context
 
-All orchestrators with verification phases use:
+All orchestrators with verification phases retain the legacy summary fields below.
+Development Phase 11 also uses the optional issue ledger and cycle counters. Keep
+the state compact: reports contain findings; state contains current status and
+task-relative evidence paths only.
 
 ```yaml
 verification_context:
@@ -312,8 +315,54 @@ verification_context:
   issues_found: []
   fixes_applied: []
   decisions_made: []
-  reverify_count: 0          # max 3
+  reverify_count: 0          # legacy count; no global three-cycle stop
+  cycle: 0                   # latest completed verification cycle
+  verification_cycles: 0     # completed full-task verification runs
+  max_verification_cycles: 20
+  max_failed_attempts_per_issue: 3  # per-issue guard; attempts_per_issue is issues[*].attempts
+  issues: []                 # development ledger; see contract below
 ```
+
+Each development issue has a stable `V-001` style ID, `title`, `severity`
+(`critical|warning|info`), `status` (`open|in_progress|verified|deferred`),
+`attempts` (failed fixes only), and optional `evidence`, `related_tests`,
+`cause`, `depends_on`, and `files` lists. Never renumber an issue on recheck;
+match by cause and location, append a new ID only for a genuinely new issue.
+`verified` requires fresh post-fix evidence. `deferred` records the user's
+decision and does not imply a passing verdict. Keep `issues_found` for older
+workflows and dashboard compatibility; for development derive its current view
+from the ledger instead of maintaining a second independent issue list.
+
+### Shared: session_handoff
+
+Long-running workflows may checkpoint at the top level of the same state file:
+
+```yaml
+session_handoff:
+  active_phase: 11
+  active_batch: B-004
+  current_issue: V-002
+  branch: main
+  checkpoint_commit: abc1234
+  last_verified_commit: abc1234   # null if no committed revision was verified
+  working_tree_status: []         # git status --short entries at checkpoint
+  working_tree_fingerprint: null   # hash of staged/unstaged diffs and untracked file contents
+  next_action: Continue timeout fix
+  pending_user_decision: null
+```
+
+Write a checkpoint after each fix batch, before a planned session stop, and
+before a likely context boundary. Do not checkpoint every tool call. Include
+the current phase, batch, issue, next action, any pending decision, branch,
+HEAD commit, working tree status, and a fingerprint of staged and unstaged
+binary diffs plus untracked file contents. Use null when a value is unknown;
+never invent a commit or fingerprint. The task remains active across sessions. After a coherent
+batch, a new Codex session may resume the same task, especially after repeated
+compactions. Do not clear the session while a fix is in progress.
+Compute the fingerprint deterministically from `git diff --binary --no-ext-diff`,
+`git diff --cached --binary --no-ext-diff`, and a path-sorted list of untracked
+files with each file's content hash. Exclude the task's own state/dashboard
+files from this comparison so checkpoint writes do not invalidate it.
 
 ### Shared: phase_summaries entry shape
 
@@ -344,7 +393,7 @@ phase_summaries:
 5. **Create task directory**: `.maister/tasks/<type>/<YYYY-MM-DD-slug>/` plus the subdirectories this workflow owns — each SKILL.md names its own; there is no structure shared by all five workflows *(skip on resume)*
 6. **Create state file**: `orchestrator-state.yml` *(skip on resume)*
 7. **Set up operator dashboard** (§ 8) — *skip this entire step when `options.html_output` is false*: copy `../assets/dashboard.html` (sibling `assets/` directory of this references/ file) to the task root as `dashboard.html`, write the initial `dashboard-data.js`, then **auto-open it in the user's browser** with the platform opener — `open "[abs-task-path]/dashboard.html"` (macOS), `xdg-open` (Linux), `start ""` (Windows). Pass the **plain absolute filesystem path — NEVER construct a `file://` URL** (hand-built URLs get mangled, e.g. `file///` missing the colon; the opener resolves plain paths itself). If the command fails, just print the path hint — never block initialization. On resume: re-copy `dashboard.html` only if missing; regenerate `dashboard-data.js` from state; then auto-open it in the browser again (same opener as a new task — if the tab is already open the OS focuses it rather than duplicating).
-8. **Create task items**: `TaskCreate` for all phases, then `TaskUpdate addBlockedBy` for dependencies. On resume, also restore completed phase statuses. When `TaskCreate`/`TaskUpdate` are unavailable in the session, record `task_ids: {}` and treat `orchestrator-state.yml` as the sole phase tracker; every other step is unchanged.
+8. **Create task items**: For a new task, `TaskCreate` for all phases, then `TaskUpdate addBlockedBy` for dependencies. On resume, follow Task Restoration below. When task operations are unavailable, record `task_ids: {}` and treat `orchestrator-state.yml` as the sole phase tracker; every other step is unchanged.
 9. **Output summary**: Show task info, phases, starting message — include the dashboard path hint `Dashboard: open [task-path]/dashboard.html in a browser to monitor progress` *only when `options.html_output` is true*.
 
 ### Task Name Generation
@@ -357,20 +406,35 @@ Examples: "Fix login timeout bug" → `2025-12-17-fix-login-timeout`
 
 ### Task Restoration on Resume
 
-Task system IDs are ephemeral to a session. On resume:
+Task ID lifetime depends on the platform. On resume:
 
-1. Create all phase tasks (same `TaskCreate` loop, all start pending)
-2. Set dependencies (same `TaskUpdate addBlockedBy`)
-3. Mark completed phases (`TaskUpdate` to `completed` with `metadata: {restored: true}`)
-4. Update state with new task IDs
+1. **Codex**: Read `codex-tasks.json` and `orchestrator.task_ids`; reuse IDs
+   that exist in both. Never recreate an existing phase task or replace its ID.
+   Reconcile recorded phase status and dependencies in place, in dependency
+   order. If an ID is missing or the registry is corrupt, stop and diagnose;
+   do not silently create a duplicate list.
+2. **Platforms with ephemeral IDs**: Recreate phase tasks, set dependencies,
+   restore completed phases, then write the new IDs to state.
+3. **No task operations**: Keep state as the phase tracker.
 
 ### Resume Logic
 
 1. **Read state file** — Load `orchestrator-state.yml`
-2. **Validate artifacts** — Check expected files for `completed_phases`. If missing, remove from list.
-3. **Find resume point** — First phase not in `completed_phases`
-4. **Check prerequisites** — Verify required artifacts exist
-5. **Restore task items** — Re-create phase tasks and mark completed ones
+2. **Validate repository checkpoint** — Compare `session_handoff.branch` and
+   `checkpoint_commit` with the current branch and HEAD, then compare recorded
+   `working_tree_status` with `git status --short`, recompute the working tree
+   fingerprint, and inspect the actual diff for the active batch. Check that
+   `last_verified_commit`, when present, is an
+   ancestor of HEAD. If branch, commit, or changes differ, stop automatic
+   mutation, inspect the discrepancy, update the checkpoint only after
+   reconciling it, and ask the user when intent cannot be determined. A missing
+   handoff in an older task is allowed; establish one from observed state.
+3. **Validate artifacts** — Check expected files for `completed_phases`. If
+   missing, diagnose before changing phase history.
+4. **Find resume point** — Use the saved active phase and batch when valid;
+   otherwise use the first incomplete phase. Preserve pending user decisions.
+5. **Check prerequisites** — Verify required artifacts exist.
+6. **Restore task items** — Follow the platform-specific rule above.
 
 | Starting From | Required Prerequisites |
 |---------------|----------------------|
@@ -393,7 +457,12 @@ If prerequisites missing, use AskUserQuestion: "Start from Phase 1", "Specify di
 1. Read verification results (structured issues)
 2. For each issue: trivial/auto-fixable → fix silently, log action; non-trivial → AskUserQuestion
 3. If fixes applied → set `skip_test_suite: false` (code changed) → re-run verification
-4. Loop until: passes OR user proceeds with known issues OR max iterations (3)
+4. Continue while progress is measurable. For development, count failed fixes
+   per stable issue ID and completed verification cycles separately. At three
+   failed fixes for the same issue, re-diagnose its cause before another fix;
+   if still blocked, request a user decision. At 20 full verification cycles,
+   checkpoint and request a decision to continue or stop. Other workflows may
+   define their own limits.
 
 ### Fixability Assessment
 
@@ -411,7 +480,8 @@ If prerequisites missing, use AskUserQuestion: "Start from Phase 1", "Specify di
 |-----------|--------|
 | Verification passes | Proceed to next phase |
 | User chooses "Proceed with known issues" | Proceed with warning logged |
-| Max iterations (3) reached | Ask user how to proceed |
+| Development issue has three failed fixes | Re-diagnose; request a decision if still blocked |
+| Development reaches 20 verification cycles | Checkpoint; ask whether to continue |
 | Critical issues remain unresolved | **MUST NOT proceed** — require user approval first |
 
 ---
@@ -493,11 +563,13 @@ window.MAISTER_DATA = {
   }],
   verification: {                 // mirror of verification_context, when it exists
     status: null,
-    issues: [],                   // [{severity, category, description, fixable, fixed}]
+    issues: [],                   // [{id, severity, category, description, fixable, fixed}]
                                   // severity is ALWAYS one of critical|warning|info — never invent
                                   // other values. When an issue gets fixed, KEEP its original
                                   // severity and set fixed: true (the viewer dims it and shows ✓ fixed)
-    fixes: [], reverify_count: 0
+                                  // for development, fixed means ledger status verified;
+                                  // deferred and unverified issues remain visible as unresolved
+    fixes: [], reverify_count: 0, verification_cycles: 0
   }
 }
 ```

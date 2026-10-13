@@ -154,6 +154,14 @@ After ALL subagents return:
 3. **Confirm each report reached disk**: every enabled review owes the file at the `report_path` you passed it. Check them; for each one missing, record an issue with `source: "artifacts"`, `severity: "warning"`, naming the agent that owed it and the path, and say plainly in the compiled report that its findings are the subagent's reply transcribed rather than its own artifact. Never let a transcription pass silently for the artifact — that substitution is the defect this check exists to surface.
 4. Aggregate issue counts
 5. Track any critical issues that would affect overall verdict
+6. In orchestrator mode, read the existing `verification_context.issues` ledger.
+   Match findings to existing IDs by cause and location, preserving IDs across
+   cycles and assigning the next `V-001` style ID only to a new issue. Return
+   the ID, current status, and task-relative evidence and related-test paths
+   with each finding. Do not increment `attempts`: the development orchestrator
+   owns failed-fix accounting. A missing finding becomes `verified` only when
+   the relevant post-fix check ran and supplies evidence; a skipped check
+   leaves its prior status unchanged. Do not duplicate report prose in state.
 
 ### Impact on Overall Status
 
@@ -184,7 +192,7 @@ Use `TaskUpdate` to set "Compile report" task to `status: "in_progress"`.
    **Re-verification rule**: `implementation-verification.md` and its `.html` companion are the CANONICAL verdict — they must always reflect the **latest** verification state. When this skill runs after fixes (`verification_context.fixes_applied` non-empty or `reverify_count` > 0):
    - REWRITE both files with the post-fix verdict — never leave the pre-fix report standing
    - Update the TL;DR block to the final verdict and remaining (not original) issue counts
-   - Add a **"Fix & Re-Verification History"** section: each issue → fix applied → re-check outcome (resolved / residual, with one-line evidence)
+   - Add a **"Fix & Re-Verification History"** section: each stable issue ID → fix applied → re-check outcome (verified / residual / unverified, with one-line evidence)
    - Subagent re-check outputs may save as side files (e.g. `code-review-reverify.md`) — fine as evidence, but they never substitute for refreshing the canonical report
 
    Structure (md report — MUST open with the Artifact Summary Contract block):
@@ -265,12 +273,16 @@ report_path: "verification/implementation-verification.md"
 html_path: "verification/implementation-verification.html"  # null if companion generation failed
 
 issues:
-  - source: "completeness" | "test_suite" | "code_review" | "pragmatic" | "production" | "reality" | "artifacts"
+  - id: "V-001"  # stable across cycles in orchestrator mode
+    source: "completeness" | "test_suite" | "code_review" | "pragmatic" | "production" | "reality" | "artifacts"
     severity: "critical" | "warning" | "info"
+    status: "open" | "in_progress" | "verified" | "deferred"
     description: "[Brief description of the issue]"
     location: "[File path or area affected]"
     fixable: true | false
     suggestion: "[How to fix, if obvious]"
+    evidence: ["verification/implementation-verification.md"]
+    related_tests: []
 
 issue_counts:
   critical: 0
