@@ -153,6 +153,11 @@ Each orchestrator reads the framework reference file at initialization (Step 1):
 | `references/orchestrator-creation-checklist.md` | Authoring checklist for creating new orchestrators (not loaded at runtime) |
 | `references/html-report-style.md` | Style guide for HTML companion reports (passed to companion-writing agents) |
 | `assets/dashboard.html` | The frozen operator dashboard, copied into every task dir |
+| `assets/tasks-dashboard.html` | Central task list viewer at `.maister/tasks/dashboard.html` |
+| `scripts/ensure-dashboards.mjs` | Creates or repairs project and task dashboard assets |
+| `scripts/generate-task-index.mjs` | Projects task states into the central task list |
+| `scripts/validate-dashboard-data.mjs` | Validates each task dashboard projection |
+| `scripts/validate-task-index.mjs` | Validates the central task list and its links |
 | `scripts/validate-dashboard-state-sync.mjs` | Verifies phase decisions/risks are projected from state into the task dashboard |
 
 ## Key Principles
@@ -189,6 +194,15 @@ This skill does NOT get invoked directly. It exists to:
 When building new orchestrators, reference these patterns rather than duplicating them.
 
 ## Dashboard projection consistency
+
+When `html_output` is enabled, run `ensure-dashboards.mjs <project-root>
+<task-directory>` at initialization and resume. It repairs both dashboard
+assets. After each task state or dashboard rewrite, run
+`generate-task-index.mjs <project-root>` and validate
+`<project-root>/.maister/tasks/dashboard-data.js` with
+`validate-task-index.mjs`. Validate the active task's `dashboard-data.js` with
+`validate-dashboard-data.mjs`. These tools are bundled in the plugin; a missing
+browser opener does not skip generation or validation.
 
 The task dashboard is a projection of `orchestrator-state.yml`, not an independent source of decisions. Before every gate and during finalization, run:
 

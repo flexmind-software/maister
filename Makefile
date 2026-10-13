@@ -13,6 +13,9 @@ validate:
 	@echo "Checking portable plugin manifest..."
 	@test -f plugins/maister/plugin.json || (echo "FAIL: missing plugins/maister/plugin.json" && exit 1)
 	@test -f plugins/maister-copilot/plugin.json || (echo "FAIL: generated variant missing plugin.json; run make build" && exit 1)
+	@echo "Checking dashboard tooling survives the Copilot build..."
+	@for name in ensure-dashboards generate-task-index validate-dashboard-data validate-task-index validate-dashboard-state-sync; do test -f "plugins/maister-copilot/skills/orchestrator-framework/scripts/$$name.mjs" || { echo "FAIL: missing dashboard script $$name.mjs"; exit 1; }; done
+	@test -f plugins/maister-copilot/skills/orchestrator-framework/assets/tasks-dashboard.html || (echo "FAIL: missing central dashboard asset" && exit 1)
 	@echo "Checking no colons in command names..."
 	@! grep -r '^name:.*:' plugins/maister-copilot/commands/ 2>/dev/null || (echo "FAIL: colons in command names" && exit 1)
 	@echo "Checking no multi-select references..."

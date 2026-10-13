@@ -1,6 +1,8 @@
 import hashlib
 import importlib.util
 import json
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -58,6 +60,51 @@ class BuildTests(unittest.TestCase):
         for name, source_server in source_mcp['mcpServers'].items():
             self.assertEqual(portable_mcp['mcpServers'][name],
                              dict(source_server, type='stdio'))
+
+    @unittest.skipUnless(shutil.which('node'), 'Node.js is required for dashboard tools')
+    def test_dashboard_index_survives_build_and_repairs_assets(self):
+        framework = self.output / 'skills/orchestrator-framework'
+        scripts = framework / 'scripts'
+        project = Path(self.temp.name) / 'project'
+        task = project / '.maister/tasks/development/example'
+        task.mkdir(parents=True)
+        (task / 'orchestrator-state.yml').write_text(
+            'orchestrator:\n  updated: 2026-10-13T12:00:00Z\n'
+            'task:\n  title: Example\n  description: Test task\n'
+            '  status: in_progress\n')
+
+        def run(script, *args):
+            return subprocess.run(['node', str(scripts / script), *map(str, args)],
+                                  capture_output=True, text=True, check=True)
+
+        for name in ('ensure-dashboards', 'generate-task-index',
+                     'validate-dashboard-data', 'validate-task-index'):
+            self.assertTrue((scripts / (name + '.mjs')).is_file())
+        run('ensure-dashboards.mjs', project, task)
+        self.assertEqual((task / 'dashboard.html').read_bytes(),
+                         (framework / 'assets/dashboard.html').read_bytes())
+        project_dashboard = project / '.maister/tasks/dashboard.html'
+        self.assertEqual(project_dashboard.read_bytes(),
+                         (framework / 'assets/tasks-dashboard.html').read_bytes())
+        run('generate-task-index.mjs', project)
+        index = project / '.maister/tasks/dashboard-data.js'
+        run('validate-task-index.mjs', index)
+        self.assertIn('development/example/dashboard.html', index.read_text())
+
+        task_data = task / 'dashboard-data.js'
+        task_data.write_text('window.MAISTER_DATA = {"task":{"title":"Example"},'
+                             '"phases":[{"id":"phase-1","name":"Analyze",'
+                             '"status":"completed","artifacts":[]}]};\n')
+        run('validate-dashboard-data.mjs', task_data)
+        task_data.write_text('window.MAISTER_DATA = {"phases":[]};\n')
+        invalid = subprocess.run(['node', str(scripts / 'validate-dashboard-data.mjs'),
+                                  str(task_data)], capture_output=True, text=True)
+        self.assertNotEqual(invalid.returncode, 0)
+
+        (task / 'dashboard.html').write_text('stale')
+        run('ensure-dashboards.mjs', project, task)
+        self.assertEqual((task / 'dashboard.html').read_bytes(),
+                         (framework / 'assets/dashboard.html').read_bytes())
 
     def test_source_hash_coverage(self):
         coverage = json.loads((self.output / 'source-coverage.json').read_text())
