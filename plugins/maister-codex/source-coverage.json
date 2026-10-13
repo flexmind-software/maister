@@ -1,5 +1,5 @@
 {
-  ".claude-plugin/plugin.json": "0cfe7664ba5f609012da1796e0f380512f9dd34d21461fa5fe23e5158c5cab33",
+  ".claude-plugin/plugin.json": "356a171888bedc26e4121e82eb3888678b90cc7013d36c58c8e955258572065e",
   ".mcp.json": "65a30f415f680a4513237ebc1e20feaa3967d42026d70436dd9f4d1cb74866f9",
   "CLAUDE.md": "d6dc0626f06b7503906436b209580ea7c1763a07ed9faf9e5faf4579235f79ad",
   "LICENSE": "335ae740d597dfa4853b23e8b89dad51fd2afd9637d23e0f3774f712296ab1e8",
@@ -38,7 +38,7 @@
   "hooks/hooks.json": "53bcf05b3366031220574a2e74bbb2b30c49daa08c3ad00e7df40fa1afbc33a7",
   "hooks/post-compact-reminder.sh": "17a049b34fefe47e28e6819a1849fdfcd1d592543fb9a8b41847b2e8b9f6f6e1",
   "hooks/skill-invocation-reminder.sh": "cf597ebd04b5701fcffb3bcd9c53a17769d767d1a645231a24249f0053f00dd4",
-  "plugin.json": "f7459a8dab1a2588f7cc8dcdb91179a183a8fe4cf9dbbdca20ddcacac76d9590",
+  "plugin.json": "eb6ebf1b7e8c06579ad6d95f30553de289ed390c10412ab73d7e81436e750958",
   "skills/codebase-analyzer/SKILL.md": "93b6184e3786429aa50149fd3c2d7b0f48c3c3d23b471addbe12864bd6881f33",
   "skills/codebase-analyzer/references/code-analysis.md": "87e76521373a169f8bae105b40efb15d5caf54d5335e6846a9653fcc692efdc0",
   "skills/codebase-analyzer/references/combined.md": "a4253d9721d645511ea69cc786efc5b511e4158915374bee51f6fffd0cd6cbe5",
