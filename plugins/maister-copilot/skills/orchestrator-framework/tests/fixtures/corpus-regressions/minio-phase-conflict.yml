@@ -1,0 +1,13 @@
+task:
+  title: Storage migration
+  description: Minimized contradictory phase evidence.
+  status: in_progress
+orchestrator:
+  failed_phases: [6]
+  phase_tasks:
+    - id: 6
+      content: Verify migration
+      active_form: Verifying migration
+      status: completed
+      blocked_by: []
+

@@ -1,0 +1,14 @@
+# Complete YAML forms used by task state files.
+task:
+  title: "Strict parser"
+  description: >-
+    First description line
+    continues here.
+  literal: |-
+    alpha
+    beta
+  status: in_progress
+  updated: 2026-10-20T12:34:56Z
+orchestrator:
+  completed_phases: [phase-1, 2]
+  options: {html_output: true, label: 'quoted value'}

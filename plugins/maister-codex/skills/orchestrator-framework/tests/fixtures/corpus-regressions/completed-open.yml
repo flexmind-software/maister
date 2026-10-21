@@ -1,0 +1,8 @@
+task:
+  title: Completed with open work
+  description: Applicable pending work contradicts completion.
+  status: completed
+orchestrator:
+  phases:
+    phase-3: pending
+

@@ -1,0 +1,9 @@
+orchestrator:
+  updated: "2026-10-20T11:00:00Z"
+  phases:
+    phase-1: completed
+    phase-2: in_progress
+task:
+  title: Newer task
+  description: A newer canonical task.
+  status: in_progress

@@ -1,0 +1,5 @@
+task:
+  title: Historical date precision
+  description: Preserve a date-only update value exactly.
+  status: in_progress
+  updated: "2026-10-09"

@@ -1,0 +1,20 @@
+task:
+  title: Conditional development phases
+  description: Explicit option and characteristic values control applicability.
+  status: in_progress
+task_context:
+  task_characteristics:
+    has_reproducible_defect: false
+    ui_heavy: false
+orchestrator:
+  options:
+    spec_audit_enabled: false
+    e2e_enabled: false
+    user_docs_enabled: false
+  phases:
+    phase-3: pending
+    phase-4: pending
+    phase-6: pending
+    phase-9: pending
+    phase-12: pending
+    phase-13: pending

@@ -1,0 +1,19 @@
+task:
+  title: Action precedence
+  description: The highest populated action tier wins.
+  status: in_progress
+orchestrator:
+  pending_user_decision: Decide now
+  pause_requested: true
+  pause_reason: Lower tier
+  current_phase: phase-7
+  phases:
+    phase-4: in_progress
+    phase-7: completed
+  phase_tasks:
+    - id: phase-4
+      status: in_progress
+      active_form: Doing lower-tier work
+  session_handoff:
+    active_phase: phase-7
+    next_action: Do not emit terminal phase

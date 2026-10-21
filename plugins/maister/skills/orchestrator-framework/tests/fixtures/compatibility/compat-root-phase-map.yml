@@ -1,0 +1,10 @@
+task:
+  title: Root phase map
+  description: Root phase objects retain dependencies.
+  status: in_progress
+phases:
+  phase-1:
+    status: completed
+  phase-2:
+    status: pending
+    dependencies: [phase-1]

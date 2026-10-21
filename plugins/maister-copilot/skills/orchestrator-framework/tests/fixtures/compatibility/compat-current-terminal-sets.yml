@@ -1,0 +1,17 @@
+task:
+  title: Current terminal sets
+  description: >-
+    Complete folded
+    description.
+  status: in_progress
+  updated: "2026-10-20T10:00:00Z"
+orchestrator:
+  current_phase: phase-4
+  completed_phases: [phase-1, 2]
+  failed_phases: [phase-3]
+  phases:
+    phase-4: in_progress
+commit:
+  status: committed
+  sha: abc123
+  message: "feat: preserve projection"

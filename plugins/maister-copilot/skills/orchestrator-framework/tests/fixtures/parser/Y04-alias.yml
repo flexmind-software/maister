@@ -1,0 +1,6 @@
+shared: &shared
+  status: pending
+task:
+  title: Alias state
+  description: Alias is forbidden
+  status: *shared

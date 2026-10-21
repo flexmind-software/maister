@@ -1,0 +1,9 @@
+task:
+  title: Entra login
+  description: Minimized skipped phase projection.
+  status: in_progress
+orchestrator:
+  skipped_phases: [3]
+  task_ids:
+    phase-3: "3"
+

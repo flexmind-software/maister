@@ -1,0 +1,14 @@
+orchestrator:
+  updated: "2026-10-20T10:00:00Z"
+  completed_phases: [phase-1, phase-7]
+  pending_decision: "Start implementation?"
+task:
+  title: Current task
+  description: >-
+    First description line
+    continued on the second line.
+  status: in_progress
+commit:
+  status: committed
+  sha: abc123
+  message: "fix: preserve state semantics"

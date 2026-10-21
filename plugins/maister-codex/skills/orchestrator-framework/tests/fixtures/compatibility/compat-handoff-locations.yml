@@ -1,0 +1,23 @@
+task:
+  title: Equivalent handoffs
+  description: Root and nested handoffs collapse without losing provenance.
+  status: in_progress
+orchestrator:
+  commit:
+    status: committed
+    sha: def456
+    message: Equivalent commit
+  phases:
+    phase-5: in_progress
+  session_handoff:
+    active_phase: phase-5
+    next_action: Continue implementation
+    pending_user_decision: Approve implementation?
+session_handoff:
+  active_phase: 5
+  next_action: " Continue implementation "
+  pending_user_decision: "Approve implementation?"
+commit:
+  status: committed
+  sha: def456
+  message: Equivalent commit

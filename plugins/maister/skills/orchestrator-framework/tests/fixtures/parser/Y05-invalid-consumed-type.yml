@@ -1,0 +1,4 @@
+task:
+  title: Wrong field type
+  description: [must, be, a, string]
+  status: pending

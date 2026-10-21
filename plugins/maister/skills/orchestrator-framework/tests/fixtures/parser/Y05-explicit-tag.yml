@@ -1,0 +1,4 @@
+task:
+  title: Tagged state
+  description: !task-description forbidden
+  status: pending

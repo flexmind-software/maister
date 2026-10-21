@@ -1,0 +1,9 @@
+orchestrator:
+  updated: "2026-10-20T10:00:00Z"
+task:
+  title: Invalid syntax
+  description: Invalid task
+  status: in_progress
+task_context:
+  risks:
+    - `invalid YAML scalar

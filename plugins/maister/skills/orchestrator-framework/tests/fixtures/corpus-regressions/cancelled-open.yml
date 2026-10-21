@@ -1,0 +1,8 @@
+task:
+  title: Cancelled with open work
+  description: Cancelled tasks may retain pending work.
+  status: cancelled
+orchestrator:
+  phases:
+    phase-3: pending
+

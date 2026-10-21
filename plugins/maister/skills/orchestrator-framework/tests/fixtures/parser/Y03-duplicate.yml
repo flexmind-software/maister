@@ -1,0 +1,5 @@
+task:
+  title: First
+  title: Second
+  description: Duplicate key
+  status: pending

@@ -1,0 +1,9 @@
+task:
+  title: First document
+  description: First
+  status: pending
+---
+task:
+  title: Second document
+  description: Second
+  status: pending

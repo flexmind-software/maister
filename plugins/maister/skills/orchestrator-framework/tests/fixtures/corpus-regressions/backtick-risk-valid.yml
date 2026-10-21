@@ -1,0 +1,10 @@
+task:
+  title: Backtick risk
+  description: Corrected risk scalar from the live corpus.
+  status: in_progress
+task_context:
+  phase_summaries:
+    analysis:
+      risks:
+        - "`EvidenceReranker` needs a deterministic fallback."
+

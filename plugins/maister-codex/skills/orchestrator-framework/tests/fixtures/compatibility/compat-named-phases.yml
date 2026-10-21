@@ -1,0 +1,10 @@
+task:
+  title: Named phases
+  description: Historical identifiers remain case-sensitive.
+  status: in_progress
+orchestrator:
+  phases:
+    analysis: completed
+    planning: completed
+    verification: in_progress
+    finalization: pending

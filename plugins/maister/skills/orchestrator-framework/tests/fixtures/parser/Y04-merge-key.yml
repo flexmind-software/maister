@@ -1,0 +1,6 @@
+defaults: &defaults
+  status: pending
+task:
+  <<: *defaults
+  title: Merge state
+  description: Merge is forbidden

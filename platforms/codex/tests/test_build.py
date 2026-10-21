@@ -61,6 +61,23 @@ class BuildTests(unittest.TestCase):
             self.assertEqual(portable_mcp['mcpServers'][name],
                              dict(source_server, type='stdio'))
 
+    def test_orchestrator_framework_runtime_distribution_assets(self):
+        relative_assets = (
+            'scripts/state-semantics.mjs',
+            'scripts/validate-dashboard-data.mjs',
+            'scripts/validate-dashboard-state-sync.mjs',
+            'tests/derived-projections.test.mjs',
+            'vendor/yaml-2.9.1/LICENSE',
+            'vendor/yaml-2.9.1/PROVENANCE.json',
+            'vendor/yaml-2.9.1/dist/index.js',
+        )
+        source = BUILD.SOURCE / 'skills/orchestrator-framework'
+        generated = self.output / 'skills/orchestrator-framework'
+        for relative in relative_assets:
+            with self.subTest(relative=relative):
+                self.assertEqual((source / relative).read_bytes(),
+                                 (generated / relative).read_bytes())
+
     @unittest.skipUnless(shutil.which('node'), 'Node.js is required for dashboard tools')
     def test_dashboard_index_survives_build_and_repairs_assets(self):
         framework = self.output / 'skills/orchestrator-framework'
@@ -92,7 +109,8 @@ class BuildTests(unittest.TestCase):
         self.assertIn('development/example/dashboard.html', index.read_text())
 
         task_data = task / 'dashboard-data.js'
-        task_data.write_text('window.MAISTER_DATA = {"task":{"title":"Example"},'
+        task_data.write_text('window.MAISTER_DATA = {"task":{"title":"Example",'
+                             '"status":"in_progress"},'
                              '"phases":[{"id":"phase-1","name":"Analyze",'
                              '"status":"completed","artifacts":[]}]};\n')
         run('validate-dashboard-data.mjs', task_data)
@@ -105,6 +123,84 @@ class BuildTests(unittest.TestCase):
         run('ensure-dashboards.mjs', project, task)
         self.assertEqual((task / 'dashboard.html').read_bytes(),
                          (framework / 'assets/dashboard.html').read_bytes())
+
+    @unittest.skipUnless(shutil.which('node'), 'Node.js is required for dashboard tools')
+    def test_dashboard_index_preserves_yaml_semantics_and_operator_action(self):
+        scripts = self.output / 'skills/orchestrator-framework/scripts'
+        project = Path(self.temp.name) / 'project'
+        task = project / '.maister/tasks/development/example'
+        task.mkdir(parents=True)
+        (task / 'orchestrator-state.yml').write_text(
+            'orchestrator:\n'
+            '  updated: "2026-10-20T10:00:00Z"\n'
+            '  started_phase: phase-7\n'
+            '  completed_phases:\n'
+            '    - phase-1\n'
+            '    - phase-7\n'
+            '  pending_decision: "Start implementation?"\n'
+            'task:\n'
+            '  title: Example\n'
+            '  description: >-\n'
+            '    First description line\n'
+            '    continued on the second line.\n'
+            '  status: in_progress\n'
+            'commit:\n'
+            '  status: committed\n'
+            '  sha: abc123\n'
+            '  message: "fix: preserve state semantics"\n'
+            'session_handoff:\n'
+            '  next_action: "Wait for explicit implementation approval"\n')
+
+        subprocess.run(
+            ['node', str(scripts / 'ensure-dashboards.mjs'), str(project), str(task)],
+            capture_output=True, text=True, check=True)
+        subprocess.run(
+            ['node', str(scripts / 'generate-task-index.mjs'), str(project)],
+            capture_output=True, text=True, check=True)
+
+        index = project / '.maister/tasks/dashboard-data.js'
+        payload = index.read_text().removeprefix(
+            'window.MAISTER_TASK_INDEX = ').removesuffix(';\n')
+        record = json.loads(payload)['tasks'][0]
+        self.assertEqual(
+            record['description'],
+            'First description line continued on the second line.')
+        self.assertIn('Start implementation?', record['next_action'])
+        self.assertNotIn('phase-7', record['next_action'])
+        self.assertEqual(record['commit_status'], 'committed')
+        self.assertEqual(record['commit_sha'], 'abc123')
+
+    @unittest.skipUnless(shutil.which('node'), 'Node.js is required for dashboard tools')
+    def test_dashboard_index_rejects_invalid_yaml_without_overwriting_index(self):
+        scripts = self.output / 'skills/orchestrator-framework/scripts'
+        project = Path(self.temp.name) / 'project'
+        task = project / '.maister/tasks/development/example'
+        task.mkdir(parents=True)
+        (task / 'orchestrator-state.yml').write_text(
+            'orchestrator:\n'
+            '  updated: "2026-10-20T10:00:00Z"\n'
+            'task:\n'
+            '  title: Example\n'
+            '  description: Test task\n'
+            '  status: in_progress\n'
+            'task_context:\n'
+            '  risks:\n'
+            '    - `invalid YAML scalar\n')
+
+        subprocess.run(
+            ['node', str(scripts / 'ensure-dashboards.mjs'), str(project), str(task)],
+            capture_output=True, text=True, check=True)
+        index = project / '.maister/tasks/dashboard-data.js'
+        original = 'window.MAISTER_TASK_INDEX = {"sentinel":true};\n'
+        index.write_text(original)
+
+        result = subprocess.run(
+            ['node', str(scripts / 'generate-task-index.mjs'), str(project)],
+            capture_output=True, text=True)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('orchestrator-state.yml', result.stderr)
+        self.assertEqual(index.read_text(), original)
 
     def test_source_hash_coverage(self):
         coverage = json.loads((self.output / 'source-coverage.json').read_text())

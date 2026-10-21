@@ -1,0 +1,10 @@
+task:
+  title: Separated task ID namespaces
+  description: Non-phase namespaces require identity only.
+  status: pending
+orchestrator:
+  group_task_ids: {group-a: "10"}
+  verification_task_ids: {review: "11"}
+  verification_cycle_1_task_ids: {audit: "12"}
+  fix_task_ids: {repair: "13"}
+  operational_task_ids: {restart: "14"}

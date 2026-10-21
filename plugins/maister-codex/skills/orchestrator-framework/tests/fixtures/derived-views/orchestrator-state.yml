@@ -1,0 +1,37 @@
+task:
+  title: Derived view fixture
+  description: Validate task-local and registry projections.
+  status: in_progress
+  updated: "2026-10-20T12:00:00Z"
+orchestrator:
+  phases:
+    phase-1:
+      status: completed
+    phase-2:
+      status: skipped
+    phase-3:
+      status: blocked
+      dependencies: [phase-1]
+  task_ids:
+    phase-1: "1"
+    phase-2: "2"
+    phase-3: "3"
+    group-build: "4"
+    unregistered: null
+  group_task_ids:
+    implementation: "5"
+  verification_cycle_1_task_ids:
+    verify: "6"
+task_context:
+  phase_summaries:
+    analysis:
+      decisions:
+        - decision: Keep canonical state authoritative.
+          rationale: Derived views only report drift.
+        - Preserve decision order.
+      risks:
+        - Stale projections can mislead operators.
+    planning:
+      decisions:
+        - Validate registry namespaces separately.
+      risks: []

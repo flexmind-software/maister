@@ -1,0 +1,6 @@
+task:
+  title: Sparse completed task
+  description: Missing phases stay unknown.
+  status: completed
+orchestrator:
+  completed_phases: [phase-1, phase-8]

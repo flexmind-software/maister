@@ -1,0 +1,12 @@
+task:
+  title: Numeric phase map
+  description: Numeric identifiers normalize only in phase fields.
+  status: in_progress
+orchestrator:
+  updated: "2026-10-20T11:00:00Z"
+  current_phase: 2
+  completed_phases: [1]
+  phases:
+    1: completed
+    2: in_progress
+    3: pending

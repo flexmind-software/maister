@@ -1,0 +1,8 @@
+orchestrator:
+  updated: "2026-10-20T10:00:00Z"
+  phases:
+    phase-1: pending
+task:
+  title: Invalid semantic state
+  description: Completed task with explicit unfinished work.
+  status: completed

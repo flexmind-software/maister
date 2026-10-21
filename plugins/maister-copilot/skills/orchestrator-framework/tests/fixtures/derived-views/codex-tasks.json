@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "next_id": 8,
+  "tasks": [
+    {"id":"1","status":"completed","blockedBy":[],"metadata":{}},
+    {"id":"2","status":"completed","blockedBy":[],"metadata":{"skipped":true}},
+    {"id":"3","status":"blocked","blockedBy":["1"],"metadata":{}},
+    {"id":"4","status":"failed","blockedBy":["unmapped"],"metadata":{}},
+    {"id":"5","status":"pending","blockedBy":[],"metadata":{}},
+    {"id":"6","status":"in_progress","blockedBy":[],"metadata":{}},
+    {"id":"7","status":"failed","blockedBy":[],"metadata":{"unmapped":true}}
+  ]
+}

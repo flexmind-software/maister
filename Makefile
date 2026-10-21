@@ -16,6 +16,8 @@ validate:
 	@echo "Checking dashboard tooling survives the Copilot build..."
 	@for name in ensure-dashboards generate-task-index validate-dashboard-data validate-task-index validate-dashboard-state-sync; do test -f "plugins/maister-copilot/skills/orchestrator-framework/scripts/$$name.mjs" || { echo "FAIL: missing dashboard script $$name.mjs"; exit 1; }; done
 	@test -f plugins/maister-copilot/skills/orchestrator-framework/assets/tasks-dashboard.html || (echo "FAIL: missing central dashboard asset" && exit 1)
+	@echo "Checking shared state runtime, tests, and vendored parser survive the Copilot build..."
+	@for rel in scripts/state-semantics.mjs tests/derived-projections.test.mjs vendor/yaml-2.9.1/LICENSE vendor/yaml-2.9.1/PROVENANCE.json vendor/yaml-2.9.1/dist/index.js; do cmp -s "plugins/maister/skills/orchestrator-framework/$$rel" "plugins/maister-copilot/skills/orchestrator-framework/$$rel" || { echo "FAIL: orchestrator framework asset drift: $$rel"; exit 1; }; done
 	@echo "Checking no colons in command names..."
 	@! grep -r '^name:.*:' plugins/maister-copilot/commands/ 2>/dev/null || (echo "FAIL: colons in command names" && exit 1)
 	@echo "Checking no multi-select references..."

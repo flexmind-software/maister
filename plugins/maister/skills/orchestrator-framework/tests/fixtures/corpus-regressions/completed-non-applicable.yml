@@ -1,0 +1,11 @@
+task:
+  title: Completed with disabled phase
+  description: Explicitly non-applicable work is valid.
+  status: completed
+task_context:
+  task_characteristics:
+    has_reproducible_defect: false
+orchestrator:
+  phases:
+    phase-3: pending
+

@@ -1,0 +1,11 @@
+task:
+  title: Root phase sequence
+  description: Root sequences and terminal sets normalize.
+  status: in_progress
+completed_phases: [1]
+phases:
+  - id: 1
+    status: completed
+  - id: phase-2
+    status: pending
+    dependencies: [1]

@@ -1,0 +1,8 @@
+task:
+  title: Superseded with open work
+  description: Superseded tasks may retain pending work.
+  status: superseded
+orchestrator:
+  phases:
+    phase-3: pending
+

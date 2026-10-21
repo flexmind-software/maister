@@ -1,0 +1,31 @@
+task:
+  name: registry-task
+  description: |
+    Mixed phase and group task identifiers.
+    Description text stays complete.
+  status: pending
+task_context:
+  phase_summaries:
+    planning:
+      decisions:
+        - decision: Keep canonical state
+          rationale: One source
+        - Validate derived views
+      risks: [Registry drift]
+orchestrator:
+  phases:
+    phase-1: completed
+    phase-2:
+      status: pending
+      dependencies: [phase-1]
+    phase-analysis: pending
+  task_ids:
+    phase-1: "1"
+    phase-2: "2"
+    phase-analysis: "6"
+    group-1: "3"
+  group_task_ids:
+    implementation: "4"
+pending_user_decision:
+  status: answered
+unrelated_identifier: "2"

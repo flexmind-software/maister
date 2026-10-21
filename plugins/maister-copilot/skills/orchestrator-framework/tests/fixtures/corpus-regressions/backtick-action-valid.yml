@@ -1,0 +1,10 @@
+task:
+  title: Backtick action
+  description: Corrected scalar from the live corpus.
+  status: in_progress
+task_context:
+  phase_summaries:
+    analysis:
+      decisions:
+        - decision: "`context_expansion_required` remains the transition reason."
+
